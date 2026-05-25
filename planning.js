@@ -1095,6 +1095,38 @@ function travelWithCarPark(fromLat, fromLon, toLat, toLon, carLat, carLon) {
 }
 
 // ──────────────────────────────────────────────────────────────
+// Calcula el tiempo de vuelta a base de un día TENIENDO EN CUENTA
+// dónde está aparcado el coche al final de la jornada.
+// Si Google Maps ya calculó _retBase, lo usa directamente.
+// Si no, recorre los clientes siguiendo _andando para saber
+// en qué punto quedó el coche y calcula:
+//   walkMin(último_cliente → coche) + driveMin(coche → base)
+// ──────────────────────────────────────────────────────────────
+function computeRetBase(day) {
+  if (day._retBase != null) return day._retBase;
+  const clients = day.clients;
+  if (!clients || clients.length === 0) return 0;
+
+  let prevLat = BASE.lat, prevLon = BASE.lon;
+  let carLat  = BASE.lat, carLon  = BASE.lon;
+
+  for (const c of clients) {
+    if (!c._andando) {
+      // El coche se movió hasta este cliente
+      carLat = c.lat;
+      carLon = c.lon;
+    }
+    prevLat = c.lat;
+    prevLon = c.lon;
+  }
+
+  // Desde el último cliente: ¿hay que andar al coche?
+  const enElCoche = Math.abs(prevLat - carLat) < 1e-5 && Math.abs(prevLon - carLon) < 1e-5;
+  const retWalk   = enElCoche ? 0 : Math.max(WALK_MIN_MIN, walkMin(prevLat, prevLon, carLat, carLon));
+  return retWalk + driveMin(carLat, carLon, BASE.lat, BASE.lon);
+}
+
+// ──────────────────────────────────────────────────────────────
 // Calcula el tiempo total de un día dado una lista de clientes
 // (incluye viajes + estancias + vuelta a base)
 // ──────────────────────────────────────────────────────────────
@@ -1384,9 +1416,7 @@ function generateExcel(schedule) {
 
     for (const day of days) {
       const clients = computeTimes(day);
-      const retBase = day._retBase != null
-        ? day._retBase
-        : driveMin(clients[clients.length-1].lat, clients[clients.length-1].lon, BASE.lat, BASE.lon);
+      const retBase = computeRetBase(day);
       const dayLabel  = day.date.toLocaleDateString('es-ES', { weekday:'long' });
       const dateStr   = day.date.toLocaleDateString('es-ES');
       const totalHStr = `${(day.totalMin/60).toFixed(1)} h`;
@@ -1471,11 +1501,8 @@ function generateHTML(schedule) {
     const hue     = (dayIdx * 43) % 360;
     const color   = `hsl(${hue},68%,42%)`;
     const clients = computeTimes(day);
-    const lastC   = clients[clients.length - 1];
-    // Usar retBase de ORS si está disponible, si no Haversine
-    const retBase = day._retBase != null
-      ? day._retBase
-      : driveMin(lastC.lat, lastC.lon, BASE.lat, BASE.lon);
+    // retBase: walk al coche (si el agente terminó andando) + drive a base
+    const retBase = computeRetBase(day);
 
     return {
       date:      day.date.toISOString().slice(0,10),
@@ -1971,10 +1998,7 @@ async function main() {
     totalDias: schedule.length,
     dias: schedule.map((day, di) => {
       const timesDay   = computeTimes(day);
-      const lastC      = timesDay[timesDay.length - 1];
-      const retBase    = day._retBase != null
-        ? day._retBase
-        : (lastC ? driveMin(lastC.lat, lastC.lon, BASE.lat, BASE.lon) : 0);
+      const retBase    = computeRetBase(day);
       return {
       fecha: day.date.toISOString().slice(0, 10),
       color: `hsl(${(di * 43) % 360},68%,42%)`,
