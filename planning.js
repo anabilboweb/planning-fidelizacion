@@ -233,14 +233,32 @@ async function geocodeCliente(c) {
 async function loadClientesFromSupabase() {
   const supaKey = process.env.SUPABASE_SERVICE_KEY || CFG.supabaseServiceKey || CFG.supabaseAnonKey || '';
   if (!supaKey) throw new Error('Sin clave Supabase para cargar clientes');
+
+  // Cargar clientes
   const r = await fetch(`${SUPA_URL}/rest/v1/clientes?activo=eq.true&select=*&order=nombre.asc`, {
     headers: { 'apikey': supaKey, 'Authorization': `Bearer ${supaKey}` }
   });
   if (!r.ok) throw new Error('Error leyendo clientes: ' + r.status + ' ' + await r.text());
   const rows = await r.json();
 
-  // Aplicar mismos filtros que parseCSV
-  return rows.filter(c => {
+  // Cargar notas para obtener el estado de cada cliente
+  let notasMap = new Map();
+  try {
+    const rN = await fetch(`${SUPA_URL}/rest/v1/notas?select=id,estado`, {
+      headers: { 'apikey': supaKey, 'Authorization': `Bearer ${supaKey}` }
+    });
+    if (rN.ok) {
+      const notas = await rN.json();
+      if (Array.isArray(notas)) notas.forEach(n => notasMap.set(n.id, n.estado || 'pendiente'));
+    }
+  } catch(e) { console.log('   ⚠️  No se pudo leer notas:', e.message); }
+
+  const excluirRealizadas    = CFG.filtros?.excluirRealizadas    !== false; // default true
+  const excluirNoInteresados = CFG.filtros?.excluirNoInteresados !== false; // default true
+
+  let excluidos = 0;
+
+  const clientes = rows.filter(c => {
     if (!c.nombre) return false;
     if (EXCLUIR_CLIENTES.has(c.nombre.toLowerCase())) return false;
     if (SOLO_MUNICIPIOS.length > 0) {
@@ -248,18 +266,34 @@ async function loadClientesFromSupabase() {
       if (!SOLO_MUNICIPIOS.some(m => pob.includes(m))) return false;
     }
     if (SOLO_CPS.size > 0 && !SOLO_CPS.has(c.cp || '')) return false;
+
+    const estado = notasMap.get(c.id) || 'pendiente';
+    if (excluirRealizadas    && estado === 'realizada')     { excluidos++; return false; }
+    if (excluirNoInteresados && estado === 'no-interesado') { excluidos++; return false; }
+
     return true;
   }).map(c => ({
-    'Nombre':         c.nombre,
-    'Dirección':      c.direccion || '',
-    'Población':      c.poblacion || '',
-    'Código postal':  c.cp || '',
-    'Provincia':      c.provincia || '',
-    lat:  c.lat  || null,
-    lon:  c.lon  || null,
-    ok:   !!(c.lat && c.lon),
-    id:   c.id
+    'Nombre':        c.nombre,
+    'Dirección':     c.direccion || '',
+    'Población':     c.poblacion || '',
+    'Código postal': c.cp || '',
+    'Provincia':     c.provincia || '',
+    lat:    c.lat  || null,
+    lon:    c.lon  || null,
+    ok:     !!(c.lat && c.lon),
+    id:     c.id,
+    _estado: notasMap.get(c.id) || 'pendiente'
   }));
+
+  if (excluidos > 0) {
+    const motivos = [
+      excluirRealizadas    ? 'realizadas'     : '',
+      excluirNoInteresados ? 'no-interesados' : ''
+    ].filter(Boolean).join(' + ');
+    console.log(`    → ${excluidos} clientes excluidos por estado (${motivos})`);
+  }
+
+  return clientes;
 }
 
 async function geocodeAll(clientes) {
@@ -2020,6 +2054,7 @@ async function main() {
         travel:         c._travelMin,
         andando:        !!c._andando,
         returnToCarMin: c._returnToCarMin || 0,
+        estado:         c._estado || 'pendiente',
         order:          i + 1
       }))
       };

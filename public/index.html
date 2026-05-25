@@ -402,7 +402,7 @@ function buildSidebar() {
       row.innerHTML = `
         <div class="cli-num" style="background:${day.color}">${c.order}</div>
         <div class="cli-info">
-          <div class="cli-name">${c.nombre}</div>
+          <div class="cli-name">${c.nombre}${c.estado === 'pospuesta' ? '<span style="font-size:9px;background:#fef3c7;color:#d97706;border-radius:4px;padding:1px 5px;font-weight:700;margin-left:5px;vertical-align:middle">🟠 Pospuesta</span>' : ''}</div>
           <div class="cli-sub">${c.poblacion}${c.cp ? ' · ' + c.cp : ''}</div>
           <div class="cli-drv">${c.andando
             ? `🚶 ${c.travel} min andando`

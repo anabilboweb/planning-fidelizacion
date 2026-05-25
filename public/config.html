@@ -273,6 +273,21 @@
                 placeholder="Código postal, uno por línea"></textarea>
             </div>
           </div>
+
+          <div class="fgroup" style="margin-top:4px">
+            <label class="flabel">Excluir según estado de visita</label>
+            <div style="display:flex;flex-direction:column;gap:10px;margin-top:8px">
+              <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px">
+                <input type="checkbox" id="excluirRealizadas" style="width:16px;height:16px;accent-color:#1a56db;cursor:pointer">
+                <span><strong style="color:#059669">🟢 Realizadas</strong> — clientes ya visitados (excluir del planning)</span>
+              </label>
+              <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px">
+                <input type="checkbox" id="excluirNoInteresados" style="width:16px;height:16px;accent-color:#1a56db;cursor:pointer">
+                <span><strong style="color:#dc2626">🔴 No interesados</strong> — clientes que rechazaron (excluir del planning)</span>
+              </label>
+            </div>
+            <div class="fhint" style="margin-top:8px">🟠 Pospuestas y ⚪ Pendientes siempre se incluyen en el planning.</div>
+          </div>
         </div>
 
         <!-- 4. BACKUP -->
@@ -464,6 +479,8 @@ async function cargarConfig() {
     if (Array.isArray(filtros.excluirClientes)) document.getElementById('excluirClientes').value = filtros.excluirClientes.join('\n');
     if (Array.isArray(filtros.soloMunicipios)) document.getElementById('soloMunicipios').value = filtros.soloMunicipios.join('\n');
     if (Array.isArray(filtros.soloCodigosPostales)) document.getElementById('soloCodigosPostales').value = filtros.soloCodigosPostales.join('\n');
+    document.getElementById('excluirRealizadas').checked    = filtros.excluirRealizadas    !== false;
+    document.getElementById('excluirNoInteresados').checked = filtros.excluirNoInteresados !== false;
 
     if (data.google_api_key) document.getElementById('googleApiKey').value = data.google_api_key;
     if (data.github_token) document.getElementById('githubToken').value = data.github_token;
@@ -494,9 +511,11 @@ async function guardarConfig() {
       lon: parseFloat(document.getElementById('baseLon').value) || null
     },
     filtros: {
-      excluirClientes: lineas(document.getElementById('excluirClientes').value),
-      soloMunicipios: lineas(document.getElementById('soloMunicipios').value),
-      soloCodigosPostales: lineas(document.getElementById('soloCodigosPostales').value)
+      excluirClientes:      lineas(document.getElementById('excluirClientes').value),
+      soloMunicipios:       lineas(document.getElementById('soloMunicipios').value),
+      soloCodigosPostales:  lineas(document.getElementById('soloCodigosPostales').value),
+      excluirRealizadas:    document.getElementById('excluirRealizadas').checked,
+      excluirNoInteresados: document.getElementById('excluirNoInteresados').checked
     },
     google_api_key: document.getElementById('googleApiKey').value.trim() || null,
     github_token: document.getElementById('githubToken').value.trim() || null
