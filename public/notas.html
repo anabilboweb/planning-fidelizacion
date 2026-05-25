@@ -204,11 +204,41 @@
 </head>
 <body>
 
+<div id="login-overlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.85);z-index:99999;align-items:center;justify-content:center;flex-direction:column;">
+  <div style="background:#fff;border-radius:16px;padding:36px 40px;width:340px;box-shadow:0 20px 60px rgba(0,0,0,.3);">
+    <div style="text-align:center;margin-bottom:24px;">
+      <div style="font-size:32px;margin-bottom:8px;">🗓</div>
+      <h2 style="font-size:20px;font-weight:800;color:#1e293b;margin:0">BilboWeb Planning</h2>
+      <p style="font-size:13px;color:#64748b;margin:6px 0 0">Acceso restringido</p>
+    </div>
+    <div style="margin-bottom:14px;">
+      <label style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px">Email</label>
+      <input id="login-email" type="email" placeholder="tu@email.com"
+        style="width:100%;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:14px;outline:none;box-sizing:border-box;"
+        onkeydown="if(event.key==='Enter')document.getElementById('login-pass').focus()">
+    </div>
+    <div style="margin-bottom:20px;">
+      <label style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px">Contraseña</label>
+      <input id="login-pass" type="password" placeholder="••••••••"
+        style="width:100%;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:14px;outline:none;box-sizing:border-box;"
+        onkeydown="if(event.key==='Enter')loginUser()">
+    </div>
+    <div id="login-error" style="display:none;background:#fee2e2;border:1px solid #fca5a5;color:#991b1b;padding:8px 12px;border-radius:8px;font-size:13px;margin-bottom:14px;"></div>
+    <button id="login-btn" onclick="loginUser()"
+      style="width:100%;padding:12px;background:#1a56db;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer;">
+      Entrar
+    </button>
+  </div>
+</div>
+
 <!-- ── NAVEGACIÓN ──────────────────────────────────────────────── -->
 <nav id="nav">
   <a href="/">🗓 Planning</a>
   <a href="/notas" class="active">📝 Notas</a>
   <a href="/config">⚙️ Config</a>
+  <button onclick="logoutUser()" style="margin-left:auto;background:transparent;border:1px solid rgba(255,255,255,.3);color:rgba(255,255,255,.7);padding:4px 12px;border-radius:6px;font-size:11px;cursor:pointer;font-weight:600;">
+    Salir
+  </button>
 </nav>
 
 <!-- ── MAIN ───────────────────────────────────────────────────── -->
@@ -376,6 +406,48 @@ const sb = createClient(
   'https://mwrkidkvjyrcuexxkhbv.supabase.co',
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im13cmtpZGt2anlyY3VleHhraGJ2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3MTIzNDQsImV4cCI6MjA5NTI4ODM0NH0.i0WJYs8buXxL6UQEcChvj5Q5p3gN02_SjMGtXtndS2s'
 );
+
+async function checkAuth() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) {
+    mostrarLogin();
+    return false;
+  }
+  return true;
+}
+
+async function loginUser() {
+  const email = document.getElementById('login-email').value.trim();
+  const pass  = document.getElementById('login-pass').value;
+  const errEl = document.getElementById('login-error');
+  const btn   = document.getElementById('login-btn');
+  errEl.style.display = 'none';
+  btn.disabled = true;
+  btn.textContent = 'Accediendo...';
+  const { error } = await sb.auth.signInWithPassword({ email, password: pass });
+  if (error) {
+    errEl.textContent = '❌ Email o contraseña incorrectos';
+    errEl.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = 'Entrar';
+  } else {
+    document.getElementById('login-overlay').style.display = 'none';
+    iniciarApp();
+  }
+}
+
+async function logoutUser() {
+  await sb.auth.signOut();
+  location.reload();
+}
+
+function mostrarLogin() {
+  document.getElementById('login-overlay').style.display = 'flex';
+}
+
+function iniciarApp() {
+  init();
+}
 
 // ═══════════════════════════════════════════════════════════════
 // ESTADO GLOBAL
@@ -825,7 +897,10 @@ async function init() {
   }
 }
 
-init();
+(async () => {
+  const ok = await checkAuth();
+  if (ok) iniciarApp();
+})();
 </script>
 </body>
 </html>
