@@ -46,12 +46,12 @@ const CACHE_FILE      = path.join(__dirname, 'geocoding_cache.json');
 const EXCEL_OUT       = path.join(__dirname, 'planning_visitas.xlsx');
 const HTML_OUT        = path.join(__dirname, 'planning_mapa.html');
 
-const START_DATE      = parseFechaInicio(CFG.fechaInicio);
-const MAX_MIN_PER_DAY = (CFG.horasMaximaDia || 5) * 60;
-const MEETING_MIN     = CFG.minutosReunion      || 30;
-const PARKING_MIN     = CFG.minutosAparcamiento || 10;
-const CLIENT_MIN      = MEETING_MIN + PARKING_MIN;
-const RADIO_ANDANDO   = (CFG.radioAndando || 600); // metros — distancia máxima para ir andando
+let START_DATE      = parseFechaInicio(CFG.fechaInicio);
+let MAX_MIN_PER_DAY = (CFG.horasMaximaDia || 5) * 60;
+let MEETING_MIN     = CFG.minutosReunion      || 30;
+let PARKING_MIN     = CFG.minutosAparcamiento || 10;
+let CLIENT_MIN      = MEETING_MIN + PARKING_MIN;
+let RADIO_ANDANDO   = (CFG.radioAndando || 600); // metros — distancia máxima para ir andando
 const WALK_KMH        = 4;                          // velocidad media andando km/h
 const WALK_MIN_MIN    = 1;                          // mínimo 1 min entre visitas andando (solo para coordenadas idénticas)
 const WALK_MAX_DIRECT_MIN = 20;                     // máx minutos andando directo aunque esté fuera de RADIO_ANDANDO
@@ -61,16 +61,16 @@ const CLUSTER_DIAMETER_KM = 2.5;  // diámetro máx de un cluster geográfico en
 const CLUSTER_MIX_MAX_KM  = 8;    // máx distancia entre centroides al combinar clusters en el mismo día
 const HELD_KARP_MAX       = 12;   // usar TSP exacto (Held-Karp) para días con ≤ N empresas
 
-const [WORK_H, WORK_M] = (CFG.horaInicioJornada || '09:00').split(':').map(Number);
+let [WORK_H, WORK_M] = (CFG.horaInicioJornada || '09:00').split(':').map(Number);
 
-const BASE = CFG.base || {
+let BASE = CFG.base || {
   nombre: 'BilboWeb', lat: 43.2956, lon: -2.9921, direccion: 'Barakaldo, Bizkaia'
 };
 
 // Filtros
-const EXCLUIR_CLIENTES = new Set((CFG.filtros?.excluirClientes || []).map(s => s.toLowerCase()));
-const SOLO_MUNICIPIOS  = (CFG.filtros?.soloMunicipios  || []).map(s => s.toLowerCase());
-const SOLO_CPS         = new Set(CFG.filtros?.soloCodigosPostales || []);
+let EXCLUIR_CLIENTES = new Set((CFG.filtros?.excluirClientes || []).map(s => s.toLowerCase()));
+let SOLO_MUNICIPIOS  = (CFG.filtros?.soloMunicipios  || []).map(s => s.toLowerCase());
+let SOLO_CPS         = new Set(CFG.filtros?.soloCodigosPostales || []);
 
 // ──────────────────────────────────────────────────────────────
 // UTILIDADES GENERALES
@@ -1733,6 +1733,42 @@ function filter() {
 // ──────────────────────────────────────────────────────────────
 // MAIN
 // ──────────────────────────────────────────────────────────────
+async function mergeSupabaseConfig() {
+  const supaUrl = 'https://mwrkidkvjyrcuexxkhbv.supabase.co';
+  const supaKey = CFG.supabaseServiceKey || CFG.supabaseAnonKey || '';
+  if (!supaKey) {
+    console.log('   ℹ️  Sin clave Supabase — usando config.json local');
+    return;
+  }
+  try {
+    const r = await fetch(`${supaUrl}/rest/v1/app_config?id=eq.1&select=*`, {
+      headers: { 'apikey': supaKey, 'Authorization': `Bearer ${supaKey}` }
+    });
+    if (!r.ok) {
+      console.log('   ⚠️  No se pudo leer app_config de Supabase:', r.status, '— usando config.json local');
+      return;
+    }
+    const rows = await r.json();
+    if (!rows.length) {
+      console.log('   ℹ️  app_config vacío en Supabase — usando config.json local');
+      return;
+    }
+    const sc = rows[0];
+    if (sc.fecha_inicio)          CFG.fechaInicio         = sc.fecha_inicio;
+    if (sc.horas_maxima_dia)      CFG.horasMaximaDia      = sc.horas_maxima_dia;
+    if (sc.minutos_reunion)       CFG.minutosReunion      = sc.minutos_reunion;
+    if (sc.minutos_aparcamiento)  CFG.minutosAparcamiento = sc.minutos_aparcamiento;
+    if (sc.hora_inicio_jornada)   CFG.horaInicioJornada   = sc.hora_inicio_jornada;
+    if (sc.radio_andando != null) CFG.radioAndando        = sc.radio_andando;
+    if (sc.base)                  CFG.base                = sc.base;
+    if (sc.filtros)               CFG.filtros             = sc.filtros;
+    if (sc.google_api_key)        CFG.googleApiKey        = sc.google_api_key;
+    console.log('   ✅ Configuración cargada desde Supabase (app_config)');
+  } catch(e) {
+    console.log('   ⚠️  Error leyendo config de Supabase:', e.message, '— usando config.json local');
+  }
+}
+
 async function main() {
   console.log('\n🚀  Planning Visitas Comerciales BilboWeb');
   console.log('══════════════════════════════════════════');
@@ -1743,6 +1779,29 @@ async function main() {
   console.log(`  Por cliente: ${MEETING_MIN} min reunión + ${PARKING_MIN} min aparcamiento (solo en coche) = ${CLIENT_MIN} min máx`);
   if (EXCLUIR_CLIENTES.size > 0) console.log(`  Excluidos  : ${EXCLUIR_CLIENTES.size} clientes`);
   if (SOLO_MUNICIPIOS.length > 0) console.log(`  Municipios : solo ${SOLO_MUNICIPIOS.join(', ')}`);
+  console.log('');
+
+  // 0. Leer config desde Supabase (override del config.json local)
+  console.log('0️⃣  Leyendo configuración desde Supabase…');
+  await mergeSupabaseConfig();
+
+  // Re-derivar constantes operativas con la config definitiva
+  START_DATE      = parseFechaInicio(CFG.fechaInicio);
+  MAX_MIN_PER_DAY = (CFG.horasMaximaDia || 5) * 60;
+  MEETING_MIN     = CFG.minutosReunion      || 30;
+  PARKING_MIN     = CFG.minutosAparcamiento || 10;
+  CLIENT_MIN      = MEETING_MIN + PARKING_MIN;
+  RADIO_ANDANDO   = CFG.radioAndando || 600;
+  [WORK_H, WORK_M] = (CFG.horaInicioJornada || '09:00').split(':').map(Number);
+  BASE            = CFG.base || { nombre: 'BilboWeb', lat: 43.2956, lon: -2.9921, direccion: 'Barakaldo, Bizkaia' };
+  EXCLUIR_CLIENTES = new Set((CFG.filtros?.excluirClientes || []).map(s => s.toLowerCase()));
+  SOLO_MUNICIPIOS  = (CFG.filtros?.soloMunicipios  || []).map(s => s.toLowerCase());
+  SOLO_CPS         = new Set(CFG.filtros?.soloCodigosPostales || []);
+
+  // Actualizar resumen en consola con config definitiva
+  console.log(`  Inicio     : ${START_DATE.toLocaleDateString('es-ES')}`);
+  console.log(`  Límite/día : ${MAX_MIN_PER_DAY/60} h`);
+  console.log(`  Jornada    : desde las ${CFG.horaInicioJornada || '09:00'}`);
   console.log('');
 
   // 1. CSV
@@ -1826,7 +1885,7 @@ async function main() {
   // Guardar en Supabase para acceso cloud
   try {
     const supaUrl = 'https://mwrkidkvjyrcuexxkhbv.supabase.co';
-    const supaKey = CFG.supabaseAnonKey || '';
+    const supaKey = CFG.supabaseServiceKey || CFG.supabaseAnonKey || '';
     if (supaKey) {
       console.log('7️⃣  Guardando en Supabase…');
       const headers = {
