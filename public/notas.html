@@ -637,7 +637,9 @@ async function abrirDrawer(cliente, day, di) {
   document.getElementById('f-proximopaso').value  = nota.proximo_paso      || '';
   document.getElementById('f-notas').value        = nota.texto             || '';
 
-  const serviciosGuardados = JSON.parse(nota.servicios || '[]');
+  const serviciosGuardados = Array.isArray(nota.servicios)
+    ? nota.servicios
+    : JSON.parse(nota.servicios || '[]');
   document.querySelectorAll('.srv-opt').forEach(el => {
     el.classList.toggle('on', serviciosGuardados.includes(el.dataset.s));
   });
@@ -692,7 +694,7 @@ async function guardarNota() {
   try {
     const { error } = await sb.from('notas').upsert(data, { onConflict: 'cliente_id' });
     if (error) throw new Error(error.message);
-    notas[clienteActual.id] = { ...data, servicios: JSON.stringify(servicios) };
+    notas[clienteActual.id] = { ...data, servicios: servicios };
     toast('✅ Nota guardada');
     cerrarDrawer();
     buildSidebar();
@@ -758,11 +760,8 @@ function buscar() {
     const card = document.getElementById('day-' + di);
     if (card) {
       card.style.display = (q && !hayCoincidencia) ? 'none' : '';
-      if (q && hayCoincidencia) {
-        const body = card.querySelector('.card-body');
-        if (body && !body.classList.contains('open')) {
-          body.classList.add('open');
-        }
+      if (q && hayCoincidencia && !card.classList.contains('open')) {
+        card.classList.add('open');
       }
     }
   });
@@ -791,7 +790,9 @@ function exportarCSV() {
     day.clientes.forEach(c => {
       const n = notas[c.id];
       if (!n) return;
-      const servicios = JSON.parse(n.servicios || '[]');
+      const servicios = Array.isArray(n.servicios)
+        ? n.servicios
+        : JSON.parse(n.servicios || '[]');
       filas.push([
         c.id, c.nombre, c.direccion, c.poblacion, c.cp,
         n.estado || 'pendiente',
