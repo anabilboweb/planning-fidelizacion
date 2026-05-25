@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BilboWeb · Configuración</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:'Segoe UI',Arial,sans-serif;background:#f1f5f9;font-size:14px;
+         min-height:100vh;display:flex;flex-direction:column;}
+
+    /* ── Nav ── */
+    #nav{display:flex;align-items:center;background:#1e293b;height:36px;
+         flex-shrink:0;padding:0 16px;}
+    #nav a{color:rgba(255,255,255,.65);text-decoration:none;font-size:12px;font-weight:600;
+           padding:0 14px;height:36px;display:flex;align-items:center;
+           border-bottom:2px solid transparent;transition:all .15s;}
+    #nav a:hover{color:#fff;}
+    #nav a.active{color:#fff;border-bottom-color:#1a56db;}
+
+    /* ── Layout ── */
+    #main{display:flex;flex:1;gap:20px;padding:24px;max-width:1400px;
+          width:100%;margin:0 auto;}
+    .col-left{flex:6;min-width:0;}
+    .col-right{flex:4;min-width:320px;}
+    @media(max-width:768px){#main{flex-direction:column;padding:14px;}.col-right{min-width:0;}}
+
+    /* ── Cards ── */
+    .card{background:#fff;border-radius:12px;
+          box-shadow:0 1px 8px rgba(0,0,0,.08);margin-bottom:18px;overflow:hidden;}
+    .card-hdr{background:linear-gradient(135deg,#1a56db,#0ea5e9);color:#fff;
+              padding:13px 18px;}
+    .card-hdr h2{font-size:15px;font-weight:700;}
+    .card-hdr p{font-size:11px;opacity:.82;margin-top:2px;}
+    .card-body{padding:18px;}
+
+    /* ── Secciones ── */
+    .section{margin-bottom:22px;}
+    .section:last-child{margin-bottom:0;}
+    .section-title{font-size:13px;font-weight:700;color:#1e293b;margin-bottom:14px;
+                   padding-bottom:7px;border-bottom:1.5px solid #e2e8f0;}
+
+    /* ── Campos ── */
+    .fgroup{margin-bottom:14px;}
+    .flabel{font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;
+            letter-spacing:.5px;margin-bottom:5px;display:block;}
+    .fhint{font-size:11px;color:#94a3b8;margin-top:4px;}
+    .finput{width:100%;padding:8px 11px;border:1.5px solid #e2e8f0;border-radius:8px;
+            font-size:13px;outline:none;font-family:inherit;transition:border .15s;
+            background:#fff;color:#1e293b;}
+    .finput:focus{border-color:#1a56db;box-shadow:0 0 0 3px rgba(26,86,219,.1);}
+    textarea.finput{resize:vertical;min-height:72px;}
+
+    .row2{display:flex;gap:12px;}
+    .row2 .fgroup{flex:1;min-width:0;}
+
+    /* ── Slider ── */
+    .slider-wrap{display:flex;align-items:center;gap:10px;}
+    .slider-wrap input[type=range]{flex:1;accent-color:#1a56db;cursor:pointer;height:4px;}
+    .slider-val{min-width:52px;text-align:center;font-weight:700;font-size:13px;
+                color:#1a56db;background:#eff6ff;border-radius:6px;padding:3px 8px;}
+
+    /* ── Botón guardar ── */
+    #btnGuardar{width:100%;padding:12px;background:#1a56db;color:#fff;border:none;
+                border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;
+                transition:all .15s;margin-top:6px;}
+    #btnGuardar:hover:not(:disabled){background:#1039a8;}
+    #btnGuardar:disabled{opacity:.6;cursor:not-allowed;}
+    #guardado-ok{display:none;margin-top:10px;padding:10px 14px;border-radius:8px;
+                 background:#d1fae5;border:1.5px solid #6ee7b7;color:#065f46;
+                 font-size:13px;font-weight:600;text-align:center;}
+
+    /* ── Panel regenerar ── */
+    .regen-card .card-hdr{background:linear-gradient(135deg,#0f172a,#1e293b);}
+    .regen-desc{font-size:13px;color:#64748b;line-height:1.6;margin-bottom:18px;}
+    #btnRegen{width:100%;padding:14px;background:#1a56db;color:#fff;border:none;
+              border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;
+              transition:background .15s;display:flex;align-items:center;
+              justify-content:center;gap:8px;}
+    #btnRegen:hover:not(:disabled){background:#1039a8;}
+    #btnRegen:disabled{opacity:.6;cursor:not-allowed;}
+    #regen-status{margin-top:14px;font-size:13px;font-weight:600;display:none;
+                  padding:10px 14px;border-radius:8px;background:#f8fafc;
+                  border:1.5px solid #e2e8f0;color:#475569;}
+    #regen-status.ok{background:#d1fae5;border-color:#6ee7b7;color:#065f46;}
+    #regen-status.err{background:#fee2e2;border-color:#fca5a5;color:#991b1b;}
+    #regen-output{display:none;margin-top:12px;background:#0f172a;color:#94a3b8;
+                  border-radius:8px;padding:14px;font-size:11.5px;
+                  font-family:'Courier New',monospace;white-space:pre-wrap;
+                  word-break:break-all;max-height:340px;overflow-y:auto;line-height:1.55;}
+
+    /* ── Spinner ── */
+    .spinner{display:inline-block;width:16px;height:16px;border:2.5px solid rgba(255,255,255,.35);
+             border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0;}
+    @keyframes spin{to{transform:rotate(360deg);}}
+
+    /* ── Error inline ── */
+    #error-carga{display:none;margin:16px 18px;padding:12px 16px;border-radius:8px;
+                 background:#fee2e2;border:1.5px solid #fca5a5;color:#991b1b;
+                 font-size:13px;font-weight:600;}
+
+    /* ── Toast ── */
+    #toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
+           background:#1e293b;color:#fff;padding:10px 20px;border-radius:10px;
+           font-size:13px;font-weight:600;opacity:0;transition:opacity .3s;
+           pointer-events:none;z-index:99999;white-space:nowrap;}
+    #toast.show{opacity:1;}
+
+    .btn-descarga-excel {
+      display: inline-block;
+      padding: 10px 20px;
+      background: #059669;
+      color: #fff;
+      border-radius: 8px;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 14px;
+      transition: background .15s;
+    }
+    .btn-descarga-excel:hover { background: #047857; }
+  </style>
+</head>
+<body>
+
+<nav id="nav">
+  <a href="/">🗓 Planning</a>
+  <a href="/notas">📝 Notas</a>
+  <a href="/config" class="active">⚙️ Config</a>
+</nav>
+
+<div id="main">
+
+  <!-- ── COLUMNA IZQUIERDA ── -->
+  <div class="col-left">
+    <div class="card">
+      <div class="card-hdr">
+        <h2>⚙️ Configuración del sistema</h2>
+        <p>BilboWeb · Planning de visitas comerciales</p>
+      </div>
+
+      <div id="error-carga">
+        ❌ No se pudo cargar la configuración. ¿Está el servidor arrancado?
+      </div>
+
+      <div class="card-body" id="form-body">
+
+        <!-- 1. PLANIFICACIÓN -->
+        <div class="section">
+          <div class="section-title">📅 Planificación</div>
+
+          <div class="fgroup">
+            <label class="flabel" for="fechaInicio">Fecha de inicio del planning</label>
+            <input type="date" id="fechaInicio" class="finput" style="max-width:220px;">
+          </div>
+
+          <div class="fgroup">
+            <label class="flabel">Horas máximas por jornada</label>
+            <div class="slider-wrap">
+              <input type="range" id="horasMaximaDia" min="1" max="10" step="0.5"
+                     oninput="document.getElementById('horasVal').textContent=this.value+' h'">
+              <span class="slider-val" id="horasVal">5 h</span>
+            </div>
+            <div class="fhint">Incluye reuniones y desplazamientos. Recomendado: 4-6 h.</div>
+          </div>
+
+          <div class="row2">
+            <div class="fgroup">
+              <label class="flabel" for="minutosReunion">Duración reunión</label>
+              <input type="number" id="minutosReunion" class="finput" min="10" max="120">
+              <div class="fhint">Minutos por visita</div>
+            </div>
+            <div class="fgroup">
+              <label class="flabel" for="minutosAparcamiento">Aparcamiento</label>
+              <input type="number" id="minutosAparcamiento" class="finput" min="0" max="60">
+              <div class="fhint">Minutos para aparcar</div>
+            </div>
+          </div>
+
+          <div class="row2">
+            <div class="fgroup">
+              <label class="flabel" for="horaInicioJornada">Inicio de jornada</label>
+              <input type="time" id="horaInicioJornada" class="finput" style="max-width:140px;">
+            </div>
+            <div class="fgroup">
+              <label class="flabel">Zona andando (metros)</label>
+              <div class="slider-wrap">
+                <input type="range" id="radioAndando" min="0" max="2000" step="50"
+                       oninput="document.getElementById('andandoVal').textContent=this.value+' m'">
+                <span class="slider-val" id="andandoVal">600 m</span>
+              </div>
+              <div class="fhint">Distancia máxima para ir a pie (sin contar aparcamiento). 0 = desactivado.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. BASE -->
+        <div class="section">
+          <div class="section-title">📍 Base de operaciones</div>
+
+          <div class="row2">
+            <div class="fgroup" style="flex:2">
+              <label class="flabel" for="baseNombre">Nombre</label>
+              <input type="text" id="baseNombre" class="finput">
+            </div>
+            <div class="fgroup" style="flex:3">
+              <label class="flabel" for="baseDireccion">Dirección</label>
+              <input type="text" id="baseDireccion" class="finput">
+            </div>
+          </div>
+
+          <div class="row2">
+            <div class="fgroup">
+              <label class="flabel" for="baseLat">Latitud</label>
+              <input type="number" id="baseLat" class="finput" step="0.0001">
+            </div>
+            <div class="fgroup">
+              <label class="flabel" for="baseLon">Longitud</label>
+              <input type="number" id="baseLon" class="finput" step="0.0001">
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. FILTROS -->
+        <div class="section">
+          <div class="section-title">🔍 Filtros (dejar vacío = incluir todo)</div>
+
+          <div class="fgroup">
+            <label class="flabel" for="excluirClientes">Clientes a excluir</label>
+            <textarea id="excluirClientes" class="finput" rows="3"
+              placeholder="Nombre exacto del cliente, uno por línea"></textarea>
+          </div>
+
+          <div class="row2">
+            <div class="fgroup">
+              <label class="flabel" for="soloMunicipios">Solo estos municipios</label>
+              <textarea id="soloMunicipios" class="finput" rows="3"
+                placeholder="Nombre de municipio, uno por línea"></textarea>
+            </div>
+            <div class="fgroup">
+              <label class="flabel" for="soloCodigosPostales">Solo estos CPs</label>
+              <textarea id="soloCodigosPostales" class="finput" rows="3"
+                placeholder="Código postal, uno por línea"></textarea>
+            </div>
+          </div>
+        </div>
+
+        <!-- 4. BACKUP -->
+        <div class="section">
+          <div class="section-title">💾 Backup automático</div>
+
+          <div class="fgroup">
+            <label class="flabel" for="backupCarpeta">Carpeta de backup</label>
+            <input type="text" id="backupCarpeta" class="finput"
+              placeholder="Ej: C:\Users\Ana\OneDrive\BilboWeb_Backup  (vacío = desactivado)">
+            <div class="fhint">Ruta local o de OneDrive donde se copiará la base de datos al finalizar.</div>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">📥 Descargar Planning</div>
+          <a href="/api/download/excel" download class="btn-descarga-excel">
+            ⬇ Descargar Planning Excel
+          </a>
+        </div>
+
+        <div class="section">
+          <div class="section-title">🔑 Google Maps API Key</div>
+          <div class="fgroup">
+            <label class="flabel">API Key</label>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input type="password" id="googleApiKey" class="finput" style="flex:1"
+                     placeholder="AIza...">
+              <button type="button" onclick="verificarGoogle()" style="padding:8px 14px;background:#1a56db;color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer;white-space:nowrap;font-weight:600">
+                Verificar
+              </button>
+            </div>
+            <div class="fhint">Necesaria para geocoding preciso y tiempos reales de conducción. <a href="https://console.cloud.google.com" target="_blank">Obtener key →</a></div>
+            <div id="google-status" style="margin-top:6px;font-size:12px;display:none"></div>
+          </div>
+        </div>
+
+        <button id="btnGuardar" onclick="guardarConfig()">💾 Guardar configuración</button>
+        <div id="guardado-ok">✅ Configuración guardada correctamente</div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ── COLUMNA DERECHA ── -->
+  <div class="col-right">
+    <div class="card regen-card">
+      <div class="card-hdr">
+        <h2>🔄 Regenerar Planning</h2>
+        <p>Ejecución local desde el ordenador de la oficina</p>
+      </div>
+      <div class="card-body">
+        <div style="padding:20px;background:#fef9c3;border:1.5px solid #fde047;border-radius:8px;color:#854d0e;line-height:1.7">
+          <strong>⚙️ Configuración local</strong><br>
+          La configuración y regeneración del planning se gestionan desde el ordenador de la oficina.<br><br>
+          <strong>Para regenerar el planning:</strong><br>
+          <code style="background:#fff;padding:2px 8px;border-radius:4px;font-size:12px">node planning.js</code>
+          desde la carpeta del proyecto.
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+function cargarConfig() {
+  document.getElementById('form-body').innerHTML = `
+    <div style="padding:20px;background:#fef9c3;border:1.5px solid #fde047;border-radius:8px;color:#854d0e;line-height:1.7">
+      <strong>⚙️ Configuración local</strong><br>
+      La configuración y regeneración del planning se gestionan desde el ordenador de la oficina.<br><br>
+      <strong>Para regenerar el planning:</strong><br>
+      <code style="background:#fff;padding:2px 8px;border-radius:4px;font-size:12px">node planning.js</code>
+      desde la carpeta del proyecto.
+    </div>
+  `;
+}
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+async function verificarGoogle() {
+  const key = document.getElementById('googleApiKey') ? document.getElementById('googleApiKey').value.trim() : '';
+  const st  = document.getElementById('google-status');
+  if (!st) return;
+  if (!key) { st.style.display='block'; st.style.color='#dc2626'; st.textContent='Introduce la API key primero.'; return; }
+  st.style.display='block'; st.style.color='#64748b'; st.textContent='Verificando…';
+  try {
+    const r = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=Bilbao&key=${key}`);
+    const d = await r.json();
+    if (d.status === 'OK') {
+      st.style.color='#059669'; st.textContent='✅ API key válida — Geocoding OK';
+    } else {
+      st.style.color='#dc2626'; st.textContent='❌ Error: ' + d.status;
+    }
+  } catch(e) { st.style.color='#dc2626'; st.textContent='❌ Error de red: ' + e.message; }
+}
+
+cargarConfig();
+</script>
+</body>
+</html>

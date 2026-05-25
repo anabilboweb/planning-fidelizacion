@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>Planning Visitas BilboWeb</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:'Segoe UI',Arial,sans-serif;display:flex;height:100vh;overflow:hidden;background:#f1f5f9;}
+
+    /* Sidebar */
+    #sidebar{width:390px;min-width:280px;display:flex;flex-direction:column;background:#fff;
+             box-shadow:3px 0 12px rgba(0,0,0,.12);z-index:900;overflow:hidden;}
+
+    #hdr{background:linear-gradient(135deg,#1a56db 0%,#0ea5e9 100%);color:#fff;padding:14px 16px;}
+    #hdr h1{font-size:17px;font-weight:700;letter-spacing:.3px;}
+    #hdr p{font-size:11px;opacity:.82;margin-top:3px;}
+
+    #stats{display:flex;gap:8px;padding:10px 12px;background:#f8fafc;border-bottom:1px solid #e2e8f0;}
+    .stat{flex:1;text-align:center;background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:7px 4px;}
+    .stat .n{font-size:22px;font-weight:800;color:#1a56db;}
+    .stat .l{font-size:10px;color:#64748b;margin-top:2px;}
+
+    #srch{padding:9px 12px;border-bottom:1px solid #e2e8f0;}
+    #srch input{width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;
+                font-size:13px;outline:none;transition:border .15s;}
+    #srch input:focus{border-color:#1a56db;box-shadow:0 0 0 3px rgba(26,86,219,.12);}
+
+    #cal{overflow-y:auto;flex:1;padding:8px 8px 16px;}
+
+    /* Day cards */
+    .card{margin-bottom:6px;border-radius:10px;border:2px solid transparent;
+          overflow:hidden;cursor:pointer;transition:transform .15s,border-color .15s;}
+    .card:hover{transform:translateX(3px);}
+    .card.open{border-color:#1a56db;box-shadow:0 2px 14px rgba(26,86,219,.2);}
+
+    .card-hdr{display:flex;align-items:center;padding:9px 12px;color:#fff;
+              font-weight:600;font-size:13px;gap:6px;}
+    .card-hdr .badge{margin-left:auto;background:rgba(255,255,255,.22);
+                     border-radius:20px;padding:2px 9px;font-size:11px;white-space:nowrap;}
+
+    .card-body{background:#fff;display:none;}
+    .card.open .card-body{display:block;}
+
+    .cli-row{display:flex;align-items:flex-start;gap:8px;padding:7px 11px;
+             border-bottom:1px solid #f1f5f9;cursor:pointer;transition:background .1s;}
+    .cli-row:hover{background:#f8fafc;}
+    .cli-row:last-of-type{border-bottom:none;}
+
+    .cli-num{min-width:22px;height:22px;border-radius:50%;display:flex;align-items:center;
+             justify-content:center;color:#fff;font-size:11px;font-weight:800;flex-shrink:0;margin-top:2px;}
+    .cli-info{flex:1;min-width:0;}
+    .cli-name{font-size:12px;font-weight:600;color:#1e293b;
+              white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .cli-sub{font-size:11px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .cli-drv{font-size:10px;color:#94a3b8;margin-top:1px;}
+    .cli-time{text-align:right;flex-shrink:0;}
+    .cli-time .arr{font-size:12px;font-weight:700;color:#0ea5e9;}
+    .cli-time .dep{font-size:10px;color:#94a3b8;}
+
+    .card-foot{padding:5px 11px;background:#f8fafc;display:flex;justify-content:space-between;
+               font-size:11px;color:#64748b;border-top:1px solid #f1f5f9;}
+
+    /* Map */
+    #map{flex:1;}
+
+    /* No results */
+    .nores{text-align:center;color:#94a3b8;font-size:13px;padding:24px;}
+
+    /* Nav */
+    #nav{display:flex;align-items:center;background:#1e293b;height:36px;flex-shrink:0;padding:0 12px;}
+    #nav a{color:rgba(255,255,255,.6);text-decoration:none;font-size:12px;font-weight:600;
+           padding:0 14px;height:36px;display:flex;align-items:center;
+           border-bottom:2px solid transparent;transition:all .15s;}
+    #nav a:hover{color:#fff;}
+    #nav a.active{color:#fff;border-bottom-color:#1a56db;}
+
+    /* App container */
+    #app{display:flex;flex:1;overflow:hidden;}
+
+    /* Botón nota */
+    .nota-btn{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;
+              border-radius:6px;font-size:11px;font-weight:600;text-decoration:none;
+              background:#eff6ff;color:#1a56db;border:1px solid #bfdbfe;
+              flex-shrink:0;transition:all .15s;cursor:pointer;white-space:nowrap;
+              margin-left:4px;}
+    .nota-btn:hover{background:#1a56db;color:#fff;border-color:#1a56db;}
+
+    /* Indicador andando */
+    .badge-walk{font-size:9px;background:#d1fae5;color:#065f46;border-radius:4px;
+                padding:1px 5px;font-weight:700;margin-left:4px;}
+  </style>
+</head>
+<body>
+
+<nav id="nav">
+  <a href="/" class="active">🗓 Planning</a>
+  <a href="/notas">📝 Notas</a>
+  <a href="/config">⚙️ Config</a>
+</nav>
+
+<div id="app">
+<div id="sidebar">
+  <div id="hdr">
+    <h1>🗓 Planning Visitas BilboWeb</h1>
+    <p>Cargando desde Supabase…</p>
+  </div>
+
+  <div id="stats">
+    <div class="stat"><div class="n" id="st-visitas">—</div><div class="l">Clientes</div></div>
+    <div class="stat"><div class="n" id="st-dias">—</div><div class="l">Días</div></div>
+    <div class="stat"><div class="n" id="wkCount">—</div><div class="l">Semanas</div></div>
+  </div>
+
+  <div id="srch">
+    <input id="q" type="text" placeholder="🔍 Buscar empresa o municipio…" oninput="filter()">
+  </div>
+
+  <div id="cal"></div>
+</div>
+
+<div id="map"></div>
+</div><!-- /app -->
+
+<script>
+const { createClient } = supabase;
+const sb = createClient(
+  'https://mwrkidkvjyrcuexxkhbv.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im13cmtpZGt2anlyY3VleHhraGJ2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3MTIzNDQsImV4cCI6MjA5NTI4ODM0NH0.i0WJYs8buXxL6UQEcChvj5Q5p3gN02_SjMGtXtndS2s'
+);
+
+let DATA = [];
+let active = null;
+const mkrs = {}, lines = {};
+const BASE = { lat: 43.2956, lon: -2.9921 };
+
+const map = L.map('map').setView([BASE.lat, BASE.lon], 10);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+  { attribution: '© OpenStreetMap contributors' }).addTo(map);
+
+L.marker([BASE.lat, BASE.lon], { icon: L.divIcon({
+  html: '<div style="background:#1a56db;color:#fff;border-radius:50%;width:34px;height:34px;display:flex;align-items:center;justify-content:center;font-size:17px;box-shadow:0 2px 7px rgba(0,0,0,.4)">🏢</div>',
+  iconSize: [34, 34], iconAnchor: [17, 17], className: ''
+}) }).addTo(map).bindPopup('<b>BilboWeb — Base</b><br>Barakaldo');
+
+async function init() {
+  try {
+    const { data: rows, error } = await sb
+      .from('planning_schedule')
+      .select('schedule')
+      .order('id', { ascending: false })
+      .limit(1);
+    if (error) throw new Error(error.message);
+    const schedule = rows?.[0]?.schedule || {};
+    DATA = (schedule.dias || []).map(d => ({
+      date:      d.fecha,
+      dateLabel: d.label,
+      totalMin:  d.totalMin,
+      color:     d.color,
+      retBase:   0,
+      clients:   (d.clientes || []).map(c => ({ ...c }))
+    }));
+    document.getElementById('st-dias').textContent    = DATA.length;
+    document.getElementById('st-visitas').textContent = DATA.reduce((s, d) => s + d.clients.length, 0);
+    document.querySelector('#hdr p').textContent =
+      'Desde Barakaldo · ' + DATA.reduce((s, d) => s + d.clients.length, 0) + ' clientes · ' + DATA.length + ' días laborables';
+
+    const weeks = new Set(DATA.map(d => {
+      if (!d.date) return 'x';
+      const dt = new Date(d.date), j = new Date(dt.getFullYear(), 0, 1);
+      return Math.ceil(((dt - j) / 864e5 + j.getDay() + 1) / 7) + '-' + dt.getFullYear();
+    }));
+    document.getElementById('wkCount').textContent = weeks.size;
+
+    /* Jitter para coords duplicadas */
+    (function () {
+      const seen = {};
+      DATA.forEach(day => {
+        day.clients.forEach(c => {
+          if (!c.lat || !c.lon) return;
+          const key = c.lat.toFixed(3) + ',' + c.lon.toFixed(3);
+          if (!seen[key]) seen[key] = 0;
+          const idx = seen[key]++;
+          if (idx > 0) {
+            const angle = idx * 2.39996;
+            const r = 0.0007 * Math.ceil(Math.sqrt(idx));
+            c.lat = parseFloat((c.lat + r * Math.sin(angle)).toFixed(6));
+            c.lon = parseFloat((c.lon + r * Math.cos(angle)).toFixed(6));
+          }
+        });
+      });
+    })();
+
+    buildMarkers();
+    buildSidebar();
+    if (DATA.length) openDay(0);
+  } catch (e) {
+    document.getElementById('hdr').innerHTML += `<p style="color:#fca5a5;margin-top:6px">Error: ${e.message}</p>`;
+  }
+}
+
+function buildMarkers() {
+  DATA.forEach((day, di) => {
+    mkrs[di] = [];
+    const pts = [[BASE.lat, BASE.lon]];
+
+    day.clients.forEach((c, ci) => {
+      if (!c.lat || !c.lon) return;
+      const m = L.marker([c.lat, c.lon], { icon: L.divIcon({
+        html: `<div style="background:${day.color};color:#fff;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;box-shadow:0 2px 5px rgba(0,0,0,.35)">${c.order}</div>`,
+        iconSize: [26, 26], iconAnchor: [13, 13], className: ''
+      }), opacity: .85 }).addTo(map);
+      m.bindPopup(`<b>${c.nombre}</b><br><small>${c.direccion}<br>${c.poblacion} ${c.cp}</small><br>🕐 ${c.llegada} – ${c.salida}<br><a href="/notas?id=${c.id}" class="nota-btn" style="margin-top:6px">📝 Abrir nota</a>`);
+      m.on('click', () => { openDay(di, true); focusClient(di, ci); });
+      mkrs[di].push(m);
+      pts.push([c.lat, c.lon]);
+    });
+
+    pts.push([BASE.lat, BASE.lon]);
+    lines[di] = L.polyline(pts, { color: day.color, weight: 2.5, opacity: .38, dashArray: '7,5' }).addTo(map);
+  });
+}
+
+function buildSidebar() {
+  const cal = document.getElementById('cal');
+  cal.innerHTML = '';
+
+  DATA.forEach((day, di) => {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.id = 'c' + di;
+
+    const h = document.createElement('div');
+    h.className = 'card-hdr';
+    h.style.background = day.color;
+    h.innerHTML = `<span>📅 ${day.dateLabel}</span>
+      <span class="badge">${day.clients.length} visitas · ${(day.totalMin / 60).toFixed(1)}h</span>`;
+    h.onclick = () => toggleDay(di);
+
+    const body = document.createElement('div');
+    body.className = 'card-body';
+
+    day.clients.forEach((c, ci) => {
+      const row = document.createElement('div');
+      row.className = 'cli-row';
+      row.innerHTML = `
+        <div class="cli-num" style="background:${day.color}">${c.order}</div>
+        <div class="cli-info">
+          <div class="cli-name">${c.nombre}</div>
+          <div class="cli-sub">${c.poblacion}${c.cp ? ' · ' + c.cp : ''}</div>
+          <div class="cli-drv">${c.andando
+            ? `🚶 ${c.travel} min andando`
+            : `${c.returnToCarMin > 0 ? `🚶 ${c.returnToCarMin}' al coche + ` : ''}${c.travel > 0 ? `🚗 ${c.travel} min` : '🚗 &lt;1 min'}`}</div>
+        </div>
+        <div class="cli-time">
+          <div class="arr">${c.llegada}</div>
+          <div class="dep">${c.salida}</div>
+        </div>
+        ${c.id ? `<a class="nota-btn" href="/notas?id=${c.id}" onclick="event.stopPropagation()">📝</a>` : ''}`;
+      row.onclick = e => { e.stopPropagation(); focusClient(di, ci); };
+      body.appendChild(row);
+    });
+
+    const foot = document.createElement('div');
+    foot.className = 'card-foot';
+    foot.innerHTML = `<span>⏱ Total: ${(day.totalMin / 60).toFixed(1)} h</span>
+      <span>🏠 ${day.retBase} min vuelta a base</span>`;
+    body.appendChild(foot);
+
+    card.appendChild(h);
+    card.appendChild(body);
+    cal.appendChild(card);
+  });
+}
+
+function toggleDay(di, force) {
+  const card = document.getElementById('c' + di);
+  const wasOpen = card.classList.contains('open');
+  if (active !== null) closeDay(active);
+  if (!wasOpen || force) openDay(di);
+}
+
+function openDay(di, keepClosed) {
+  if (keepClosed) return;
+  const card = document.getElementById('c' + di);
+  card.classList.add('open');
+  active = di;
+  if (lines[di]) lines[di].setStyle({ opacity: .9, weight: 4.5 });
+  mkrs[di]?.forEach(m => m.setOpacity(1));
+  DATA.forEach((_, k) => {
+    if (k !== di) {
+      if (lines[k]) lines[k].setStyle({ opacity: .12, weight: 1.5 });
+      mkrs[k]?.forEach(m => m.setOpacity(.28));
+    }
+  });
+  const pts = DATA[di].clients.filter(c => c.lat && c.lon).map(c => [c.lat, c.lon]);
+  if (pts.length) map.fitBounds([[BASE.lat, BASE.lon], ...pts], { padding: [50, 50] });
+  card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function closeDay(di) {
+  document.getElementById('c' + di)?.classList.remove('open');
+  active = null;
+  DATA.forEach((_, k) => {
+    if (lines[k]) lines[k].setStyle({ opacity: .38, weight: 2.5 });
+    mkrs[k]?.forEach(m => m.setOpacity(.85));
+  });
+}
+
+function focusClient(di, ci) {
+  const c = DATA[di].clients[ci];
+  if (c.lat && c.lon) {
+    map.setView([c.lat, c.lon], 15);
+    mkrs[di]?.[ci]?.openPopup();
+  }
+}
+
+function filter() {
+  const q = document.getElementById('q').value.toLowerCase().trim();
+  let shown = 0;
+  DATA.forEach((day, di) => {
+    const card = document.getElementById('c' + di);
+    const hit = !q || day.dateLabel.toLowerCase().includes(q) ||
+      day.clients.some(c => c.nombre.toLowerCase().includes(q) ||
+                            c.poblacion.toLowerCase().includes(q));
+    card.style.display = hit ? '' : 'none';
+    if (hit) shown++;
+  });
+  let nr = document.getElementById('nores');
+  if (!shown && q) {
+    if (!nr) { nr = document.createElement('div'); nr.id = 'nores'; nr.className = 'nores'; document.getElementById('cal').appendChild(nr); }
+    nr.textContent = 'Sin resultados para "' + q + '"';
+  } else if (nr) nr.remove();
+}
+
+init();
+</script>
+</body>
+</html>

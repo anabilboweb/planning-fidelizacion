@@ -1,0 +1,9 @@
+node_modules/
+config.json
+*.db
+geocoding_cache.json
+planning_schedule.json
+planning_mapa.html
+planning_visitas.xlsx
+fidelizacion_clean.csv
+.env
