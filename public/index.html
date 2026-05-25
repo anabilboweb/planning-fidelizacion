@@ -276,7 +276,7 @@ async function init() {
       dateLabel: d.label,
       totalMin:  d.totalMin,
       color:     d.color,
-      retBase:   0,
+      retBase:   d.retBase || 0,
       clients:   (d.clientes || []).map(c => ({ ...c }))
     }));
     document.getElementById('st-dias').textContent    = DATA.length;

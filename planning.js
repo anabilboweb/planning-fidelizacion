@@ -1969,14 +1969,21 @@ async function main() {
     generado: new Date().toISOString(),
     totalClientes: geo.length,
     totalDias: schedule.length,
-    dias: schedule.map((day, di) => ({
+    dias: schedule.map((day, di) => {
+      const timesDay   = computeTimes(day);
+      const lastC      = timesDay[timesDay.length - 1];
+      const retBase    = day._retBase != null
+        ? day._retBase
+        : (lastC ? driveMin(lastC.lat, lastC.lon, BASE.lat, BASE.lon) : 0);
+      return {
       fecha: day.date.toISOString().slice(0, 10),
       color: `hsl(${(di * 43) % 360},68%,42%)`,
       label: day.date.toLocaleDateString('es-ES', {
         weekday: 'long', day: '2-digit', month: 'long', year: 'numeric'
       }),
       totalMin: day.totalMin,
-      clientes: computeTimes(day).map((c, i) => ({
+      retBase,
+      clientes: timesDay.map((c, i) => ({
         id:        c.id || '',
         nombre:    c['Nombre'],
         direccion: c['Dirección'],
@@ -1991,7 +1998,8 @@ async function main() {
         returnToCarMin: c._returnToCarMin || 0,
         order:          i + 1
       }))
-    }))
+      };
+    })
   };
   if (!IS_CLOUD) {
     fs.writeFileSync(
