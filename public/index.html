@@ -496,60 +496,126 @@ function filter() {
   } else if (nr) nr.remove();
 }
 
-function downloadExcel() {
+async function downloadExcel() {
   if (!DATA.length) { alert('No hay planning cargado.'); return; }
 
-  const wb = XLSX.utils.book_new();
+  const btn = document.querySelector('button[onclick="downloadExcel()"]');
+  const orig = btn ? btn.textContent : '';
+  if (btn) { btn.textContent = '⏳ Generando…'; btn.disabled = true; }
 
-  // Agrupar por semana
-  const weeks = new Map();
-  DATA.forEach(day => {
-    const dt = new Date(day.date);
-    const j  = new Date(dt.getFullYear(), 0, 1);
-    const w  = Math.ceil(((dt - j) / 86400000 + j.getDay() + 1) / 7);
-    const wKey = `${dt.getFullYear()}-S${String(w).padStart(2,'0')}`;
-    if (!weeks.has(wKey)) weeks.set(wKey, []);
-    weeks.get(wKey).push(day);
-  });
+  try {
+    const { data: notasArr } = await sb.from('notas').select('*');
+    const notasMap = new Map((notasArr || []).map(n => [n.cliente_id, n]));
 
-  for (const [wKey, days] of weeks) {
-    const rows = [['Día','Fecha','Nº','Empresa','Dirección','Municipio','CP','Llegada','Salida','Viaje sig. (min)','Total día']];
-    for (const day of days) {
-      const dt       = new Date(day.date);
-      const dayLabel = dt.toLocaleDateString('es-ES', { weekday: 'long' });
-      const dateStr  = dt.toLocaleDateString('es-ES');
-      const totalH   = (day.totalMin / 60).toFixed(1) + ' h';
-      day.clients.forEach((c, i) => {
-        const nextMin   = i < day.clients.length - 1 ? day.clients[i+1].travel : day.retBase;
-        const nextLabel = i < day.clients.length - 1 ? String(nextMin) : `↩ ${nextMin} (base)`;
-        rows.push([
-          i === 0 ? dayLabel : '', i === 0 ? dateStr : '',
-          i + 1, c.nombre, c.direccion, c.poblacion, c.cp,
-          c.llegada, c.salida, nextLabel, i === 0 ? totalH : ''
+    const wb = XLSX.utils.book_new();
+
+    // ── HOJA 1: PLANNING ────────────────────────────────────────
+    const weeks = new Map();
+    DATA.forEach(day => {
+      const dt = new Date(day.date);
+      const j  = new Date(dt.getFullYear(), 0, 1);
+      const w  = Math.ceil(((dt - j) / 86400000 + j.getDay() + 1) / 7);
+      const wKey = `${dt.getFullYear()}-S${String(w).padStart(2,'0')}`;
+      if (!weeks.has(wKey)) weeks.set(wKey, []);
+      weeks.get(wKey).push(day);
+    });
+
+    const planRows = [['Día','Fecha','Nº','Empresa','Dirección','Municipio','CP','Llegada','Salida','Viaje sig. (min)','Total día','Estado']];
+    for (const [, days] of weeks) {
+      for (const day of days) {
+        const dt       = new Date(day.date);
+        const dayLabel = dt.toLocaleDateString('es-ES', { weekday: 'long' });
+        const dateStr  = dt.toLocaleDateString('es-ES');
+        const totalH   = (day.totalMin / 60).toFixed(1) + ' h';
+        day.clients.forEach((c, i) => {
+          const nextMin   = i < day.clients.length - 1 ? day.clients[i+1].travel : day.retBase;
+          const nextLabel = i < day.clients.length - 1 ? String(nextMin) : `↩ ${nextMin} (base)`;
+          const nota      = notasMap.get(c.id) || {};
+          planRows.push([
+            i === 0 ? dayLabel : '', i === 0 ? dateStr : '',
+            i + 1, c.nombre, c.direccion, c.poblacion, c.cp,
+            c.llegada, c.salida, nextLabel, i === 0 ? totalH : '',
+            nota.estado || c.estado || 'pendiente'
+          ]);
+        });
+        planRows.push(new Array(12).fill(''));
+      }
+    }
+    const wsPlan = XLSX.utils.aoa_to_sheet(planRows);
+    wsPlan['!cols'] = [{wch:12},{wch:11},{wch:4},{wch:38},{wch:38},{wch:22},{wch:7},{wch:9},{wch:9},{wch:16},{wch:9},{wch:14}];
+    XLSX.utils.book_append_sheet(wb, wsPlan, 'Planning');
+
+    // ── HOJA 2: ACTIVIDAD COMERCIAL ─────────────────────────────
+    const actRows = [[
+      'Fecha plan.','Día semana','Llegada','Empresa','Municipio','CP',
+      'Estado visita','Fecha visita','Interlocutor','Interés (⭐)',
+      'Problema / Dolor','Servicios interesados','Próximo paso',
+      'Fecha seguimiento','Notas libres','Última actualización'
+    ]];
+    DATA.forEach(day => {
+      const dt      = new Date(day.date);
+      const fecha   = dt.toLocaleDateString('es-ES');
+      const diaSem  = dt.toLocaleDateString('es-ES', { weekday: 'long' });
+      day.clients.forEach(c => {
+        const n = notasMap.get(c.id) || {};
+        const servicios = Array.isArray(n.servicios) ? n.servicios.join(', ') : (n.servicios || '');
+        actRows.push([
+          fecha,
+          diaSem,
+          c.llegada,
+          c.nombre,
+          c.poblacion,
+          c.cp,
+          n.estado || c.estado || 'pendiente',
+          n.fecha_visita      || '',
+          n.interlocutor      || '',
+          n.interes ? '⭐'.repeat(n.interes) : '',
+          (n.dolor            || '').replace(/\n/g,' '),
+          servicios,
+          (n.proximo_paso     || '').replace(/\n/g,' '),
+          n.fecha_seguimiento || '',
+          (n.texto            || '').replace(/\n/g,' '),
+          n.actualizado_en ? new Date(n.actualizado_en).toLocaleDateString('es-ES') : ''
         ]);
       });
-      rows.push(new Array(11).fill(''));
-    }
-    const ws = XLSX.utils.aoa_to_sheet(rows);
-    ws['!cols'] = [{wch:12},{wch:11},{wch:4},{wch:42},{wch:42},{wch:24},{wch:7},{wch:11},{wch:11},{wch:18},{wch:10}];
-    XLSX.utils.book_append_sheet(wb, ws, wKey);
-  }
+    });
+    const wsAct = XLSX.utils.aoa_to_sheet(actRows);
+    wsAct['!cols'] = [{wch:12},{wch:12},{wch:9},{wch:38},{wch:20},{wch:7},{wch:14},{wch:12},{wch:20},{wch:11},{wch:30},{wch:30},{wch:30},{wch:14},{wch:40},{wch:14}];
+    XLSX.utils.book_append_sheet(wb, wsAct, 'Actividad Comercial');
 
-  // Hoja RESUMEN
-  const sumRows = [['Semana','Días','Visitas','Clientes/día','Primera fecha','Última fecha']];
-  for (const [wKey, days] of weeks) {
-    const vis = days.reduce((s, d) => s + d.clients.length, 0);
-    sumRows.push([
-      wKey, days.length, vis, (vis / days.length).toFixed(1),
-      new Date(days[0].date).toLocaleDateString('es-ES'),
-      new Date(days[days.length-1].date).toLocaleDateString('es-ES')
-    ]);
-  }
-  const wsSum = XLSX.utils.aoa_to_sheet(sumRows);
-  wsSum['!cols'] = [{wch:12},{wch:8},{wch:9},{wch:13},{wch:14},{wch:14}];
-  XLSX.utils.book_append_sheet(wb, wsSum, 'RESUMEN');
+    // ── HOJA 3: RESUMEN ─────────────────────────────────────────
+    const totalClientes = DATA.reduce((s, d) => s + d.clients.length, 0);
+    const conteo = { pendiente: 0, pospuesta: 0, realizada: 0, 'no-interesado': 0, sinNota: 0 };
+    DATA.forEach(day => day.clients.forEach(c => {
+      const n = notasMap.get(c.id);
+      if (!n) { conteo.sinNota++; return; }
+      const e = n.estado || 'pendiente';
+      if (conteo[e] !== undefined) conteo[e]++; else conteo.pendiente++;
+    }));
 
-  XLSX.writeFile(wb, 'planning_visitas.xlsx');
+    const sumRows = [
+      ['Resumen de actividad comercial'],
+      [],
+      ['Total clientes en planning', totalClientes],
+      [],
+      ['Estado', 'Nº clientes', '% del total'],
+      ['⚪ Pendiente',     conteo.pendiente,        ((conteo.pendiente / totalClientes)*100).toFixed(1)+'%'],
+      ['🟠 Pospuesta',    conteo.pospuesta,        ((conteo.pospuesta / totalClientes)*100).toFixed(1)+'%'],
+      ['🟢 Realizada',    conteo.realizada,        ((conteo.realizada / totalClientes)*100).toFixed(1)+'%'],
+      ['🔴 No interesado',conteo['no-interesado'], ((conteo['no-interesado'] / totalClientes)*100).toFixed(1)+'%'],
+      ['(Sin nota)',       conteo.sinNota,          ((conteo.sinNota / totalClientes)*100).toFixed(1)+'%'],
+      [],
+      ['Generado el', new Date().toLocaleDateString('es-ES', { day:'2-digit', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit' })]
+    ];
+    const wsSum = XLSX.utils.aoa_to_sheet(sumRows);
+    wsSum['!cols'] = [{wch:22},{wch:14},{wch:14}];
+    XLSX.utils.book_append_sheet(wb, wsSum, 'Resumen');
+
+    XLSX.writeFile(wb, 'planning_bilboweb.xlsx');
+
+  } finally {
+    if (btn) { btn.textContent = orig; btn.disabled = false; }
+  }
 }
 
 (async () => {
