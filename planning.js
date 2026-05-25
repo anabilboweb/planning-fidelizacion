@@ -16,12 +16,20 @@ const crypto = require('crypto');
 const CONFIG_FILE   = path.join(__dirname, 'config.json');
 const FESTIVOS_FILE = path.join(__dirname, 'festivos.json');
 
-if (!fs.existsSync(CONFIG_FILE)) {
+// En GitHub Actions no hay config.json — se usa Supabase + variables de entorno
+const _isCloud = !!process.env.GITHUB_ACTIONS;
+if (!fs.existsSync(CONFIG_FILE) && !_isCloud) {
   console.error('❌ No se encuentra config.json. Créalo antes de ejecutar.');
   process.exit(1);
 }
 
-const CFG = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8'));
+const CFG = fs.existsSync(CONFIG_FILE)
+  ? JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8'))
+  : {
+      supabaseServiceKey: process.env.SUPABASE_SERVICE_KEY || '',
+      supabaseAnonKey:    '',
+      googleApiKey:       process.env.GOOGLE_API_KEY || ''
+    };
 const FESTIVOS_DATA = fs.existsSync(FESTIVOS_FILE)
   ? JSON.parse(fs.readFileSync(FESTIVOS_FILE, 'utf-8'))
   : { dias: [] };
