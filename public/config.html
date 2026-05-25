@@ -388,16 +388,83 @@ function iniciarApp() {
   cargarConfig();
 }
 
-function cargarConfig() {
-  document.getElementById('form-body').innerHTML = `
-    <div style="padding:20px;background:#fef9c3;border:1.5px solid #fde047;border-radius:8px;color:#854d0e;line-height:1.7">
-      <strong>⚙️ Configuración local</strong><br>
-      La configuración y regeneración del planning se gestionan desde el ordenador de la oficina.<br><br>
-      <strong>Para regenerar el planning:</strong><br>
-      <code style="background:#fff;padding:2px 8px;border-radius:4px;font-size:12px">node planning.js</code>
-      desde la carpeta del proyecto.
-    </div>
-  `;
+async function cargarConfig() {
+  try {
+    const { data, error } = await sb.from('app_config').select('*').eq('id', 1).single();
+    if (error && error.code !== 'PGRST116') throw error;
+    if (!data) return;
+
+    if (data.fecha_inicio) document.getElementById('fechaInicio').value = data.fecha_inicio;
+
+    const horas = data.horas_maxima_dia ?? 5;
+    document.getElementById('horasMaximaDia').value = horas;
+    document.getElementById('horasVal').textContent = horas + ' h';
+
+    if (data.minutos_reunion != null) document.getElementById('minutosReunion').value = data.minutos_reunion;
+    if (data.minutos_aparcamiento != null) document.getElementById('minutosAparcamiento').value = data.minutos_aparcamiento;
+    if (data.hora_inicio_jornada) document.getElementById('horaInicioJornada').value = data.hora_inicio_jornada;
+
+    const radio = data.radio_andando ?? 600;
+    document.getElementById('radioAndando').value = radio;
+    document.getElementById('andandoVal').textContent = radio + ' m';
+
+    const base = data.base || {};
+    if (base.nombre) document.getElementById('baseNombre').value = base.nombre;
+    if (base.direccion) document.getElementById('baseDireccion').value = base.direccion;
+    if (base.lat != null) document.getElementById('baseLat').value = base.lat;
+    if (base.lon != null) document.getElementById('baseLon').value = base.lon;
+
+    const filtros = data.filtros || {};
+    if (Array.isArray(filtros.excluirClientes)) document.getElementById('excluirClientes').value = filtros.excluirClientes.join('\n');
+    if (Array.isArray(filtros.soloMunicipios)) document.getElementById('soloMunicipios').value = filtros.soloMunicipios.join('\n');
+    if (Array.isArray(filtros.soloCodigosPostales)) document.getElementById('soloCodigosPostales').value = filtros.soloCodigosPostales.join('\n');
+
+    if (data.google_api_key) document.getElementById('googleApiKey').value = data.google_api_key;
+  } catch(e) {
+    document.getElementById('error-carga').style.display = 'block';
+    console.error('Error cargando config:', e);
+  }
+}
+
+async function guardarConfig() {
+  const btn = document.getElementById('btnGuardar');
+  btn.disabled = true;
+
+  const lineas = t => t.split('\n').map(s => s.trim()).filter(Boolean);
+
+  const payload = {
+    id: 1,
+    fecha_inicio: document.getElementById('fechaInicio').value || null,
+    horas_maxima_dia: parseFloat(document.getElementById('horasMaximaDia').value) || 5,
+    minutos_reunion: parseInt(document.getElementById('minutosReunion').value) || 30,
+    minutos_aparcamiento: parseInt(document.getElementById('minutosAparcamiento').value) || 10,
+    hora_inicio_jornada: document.getElementById('horaInicioJornada').value || '09:00',
+    radio_andando: parseInt(document.getElementById('radioAndando').value) || 600,
+    base: {
+      nombre: document.getElementById('baseNombre').value.trim(),
+      direccion: document.getElementById('baseDireccion').value.trim(),
+      lat: parseFloat(document.getElementById('baseLat').value) || null,
+      lon: parseFloat(document.getElementById('baseLon').value) || null
+    },
+    filtros: {
+      excluirClientes: lineas(document.getElementById('excluirClientes').value),
+      soloMunicipios: lineas(document.getElementById('soloMunicipios').value),
+      soloCodigosPostales: lineas(document.getElementById('soloCodigosPostales').value)
+    },
+    google_api_key: document.getElementById('googleApiKey').value.trim() || null
+  };
+
+  try {
+    const { error } = await sb.from('app_config').upsert(payload, { onConflict: 'id' });
+    if (error) throw error;
+    document.getElementById('guardado-ok').style.display = 'block';
+    setTimeout(() => { document.getElementById('guardado-ok').style.display = 'none'; }, 3000);
+    toast('✅ Configuración guardada');
+  } catch(e) {
+    toast('❌ Error al guardar: ' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 function toast(msg) {
