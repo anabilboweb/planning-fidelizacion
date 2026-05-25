@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
   <title>Planning Visitas BilboWeb</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/exceljs@4.3.0/dist/exceljs.min.js"></script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
@@ -145,9 +145,10 @@
   <a href="/" class="active">🗓 Planning</a>
   <a href="/notas">📝 Notas</a>
   <a href="/config">⚙️ Config</a>
-  <button onclick="downloadExcel()" style="margin-left:auto;background:#059669;border:none;color:#fff;padding:4px 14px;border-radius:6px;font-size:11px;cursor:pointer;font-weight:600;">
-    ⬇ Excel
-  </button>
+  <div style="margin-left:auto;display:flex;gap:5px;">
+    <button onclick="downloadExcel('planning')" id="btn-xls-plan" style="background:#059669;border:none;color:#fff;padding:4px 12px;border-radius:6px;font-size:11px;cursor:pointer;font-weight:600;">📅 Semanal</button>
+    <button onclick="downloadExcel('completo')" id="btn-xls-full" style="background:#0ea5e9;border:none;color:#fff;padding:4px 12px;border-radius:6px;font-size:11px;cursor:pointer;font-weight:600;">📊 Completo</button>
+  </div>
   <button onclick="logoutUser()" style="margin-left:8px;background:transparent;border:1px solid rgba(255,255,255,.3);color:rgba(255,255,255,.7);padding:4px 12px;border-radius:6px;font-size:11px;cursor:pointer;font-weight:600;">
     Salir
   </button>
@@ -496,20 +497,59 @@ function filter() {
   } else if (nr) nr.remove();
 }
 
-async function downloadExcel() {
+async function downloadExcel(tipo) {
   if (!DATA.length) { alert('No hay planning cargado.'); return; }
 
-  const btn = document.querySelector('button[onclick="downloadExcel()"]');
+  const btnPlan = document.getElementById('btn-xls-plan');
+  const btnFull = document.getElementById('btn-xls-full');
+  const btn = tipo === 'planning' ? btnPlan : btnFull;
   const orig = btn ? btn.textContent : '';
-  if (btn) { btn.textContent = '⏳ Generando…'; btn.disabled = true; }
+  if (btn) { btn.textContent = '⏳…'; btn.disabled = true; }
+
+  // Colores ARGB
+  const AZUL      = 'FF1A56DB';
+  const BLANCO    = 'FFFFFFFF';
+  const GRIS_FILA = 'FFF8FAFC';
+
+  const ESTADO_FILL = {
+    'realizada':     'FFD1FAE5',
+    'pospuesta':     'FFFEF3C7',
+    'no-interesado': 'FFFEE2E2',
+    'pendiente':     null
+  };
+
+  function headerStyle(cell) {
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: AZUL } };
+    cell.font = { bold: true, color: { argb: BLANCO }, size: 10 };
+    cell.alignment = { vertical: 'middle' };
+  }
+
+  function estadoFill(cell, estado) {
+    const argb = ESTADO_FILL[estado];
+    if (argb) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb } };
+  }
+
+  function zebraFill(cell, rowIdx) {
+    if (rowIdx % 2 === 0) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GRIS_FILA } };
+  }
 
   try {
-    const { data: notasArr } = await sb.from('notas').select('*');
-    const notasMap = new Map((notasArr || []).map(n => [n.cliente_id, n]));
+    // Cargar notas si hace falta
+    let notasMap = new Map();
+    if (tipo === 'completo') {
+      const { data: notasArr } = await sb.from('notas').select('*');
+      (notasArr || []).forEach(n => notasMap.set(n.cliente_id, n));
+    } else {
+      // Para planning también queremos el estado
+      const { data: notasArr } = await sb.from('notas').select('cliente_id,estado');
+      (notasArr || []).forEach(n => notasMap.set(n.cliente_id, n));
+    }
 
-    const wb = XLSX.utils.book_new();
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'BilboWeb Planning';
+    wb.created = new Date();
 
-    // ── HOJA 1: PLANNING ────────────────────────────────────────
+    // ── Agrupar por semana ───────────────────────────────────────
     const weeks = new Map();
     DATA.forEach(day => {
       const dt = new Date(day.date);
@@ -520,98 +560,177 @@ async function downloadExcel() {
       weeks.get(wKey).push(day);
     });
 
-    const planRows = [['Día','Fecha','Nº','Empresa','Dirección','Municipio','CP','Llegada','Salida','Viaje sig. (min)','Total día','Estado']];
-    for (const [, days] of weeks) {
+    // ── HOJAS SEMANALES ─────────────────────────────────────────
+    for (const [wKey, days] of weeks) {
+      const ws = wb.addWorksheet(wKey);
+      ws.views = [{ state: 'frozen', ySplit: 1 }];
+
+      const headers = ['Día','Fecha','Nº','Empresa','Dirección','Municipio','CP','Llegada','Salida','Viaje sig.','Total día','Estado'];
+      ws.columns = [
+        { key:'dia',     width:13 }, { key:'fecha',  width:12 },
+        { key:'num',     width:5  }, { key:'nombre', width:38 },
+        { key:'dir',     width:38 }, { key:'mun',    width:22 },
+        { key:'cp',      width:8  }, { key:'arr',    width:10 },
+        { key:'sal',     width:10 }, { key:'viaje',  width:14 },
+        { key:'total',   width:10 }, { key:'estado', width:15 }
+      ];
+
+      const hRow = ws.addRow(headers);
+      hRow.height = 20;
+      hRow.eachCell(c => headerStyle(c));
+      ws.autoFilter = { from: 'A1', to: 'L1' };
+
+      let dataRowIdx = 0;
       for (const day of days) {
-        const dt       = new Date(day.date);
-        const dayLabel = dt.toLocaleDateString('es-ES', { weekday: 'long' });
-        const dateStr  = dt.toLocaleDateString('es-ES');
-        const totalH   = (day.totalMin / 60).toFixed(1) + ' h';
+        const dt      = new Date(day.date);
+        const fecha   = dt.toLocaleDateString('es-ES');
+        const diaNom  = dt.toLocaleDateString('es-ES', { weekday: 'long' });
+        const totalH  = (day.totalMin / 60).toFixed(1) + ' h';
+
         day.clients.forEach((c, i) => {
           const nextMin   = i < day.clients.length - 1 ? day.clients[i+1].travel : day.retBase;
-          const nextLabel = i < day.clients.length - 1 ? String(nextMin) : `↩ ${nextMin} (base)`;
+          const nextLabel = i < day.clients.length - 1 ? `${nextMin} min` : `↩ ${nextMin} min (base)`;
           const nota      = notasMap.get(c.id) || {};
-          planRows.push([
-            i === 0 ? dayLabel : '', i === 0 ? dateStr : '',
+          const estado    = nota.estado || c.estado || 'pendiente';
+
+          const row = ws.addRow([
+            i === 0 ? diaNom : '', i === 0 ? fecha : '',
             i + 1, c.nombre, c.direccion, c.poblacion, c.cp,
-            c.llegada, c.salida, nextLabel, i === 0 ? totalH : '',
-            nota.estado || c.estado || 'pendiente'
+            c.llegada, c.salida, nextLabel,
+            i === 0 ? totalH : '', estado
           ]);
+          dataRowIdx++;
+
+          row.eachCell((cell, col) => {
+            // Color por estado en columna Estado (12) o fondo cebra
+            if (col === 12) estadoFill(cell, estado);
+            else zebraFill(cell, dataRowIdx);
+            cell.alignment = { vertical: 'middle' };
+          });
+          // Negrita en primera fila del día
+          if (i === 0) {
+            row.getCell(1).font = { bold: true };
+            row.getCell(11).font = { bold: true };
+          }
         });
-        planRows.push(new Array(12).fill(''));
+
+        // Fila separadora vacía entre días
+        ws.addRow([]);
+        dataRowIdx++;
       }
     }
-    const wsPlan = XLSX.utils.aoa_to_sheet(planRows);
-    wsPlan['!cols'] = [{wch:12},{wch:11},{wch:4},{wch:38},{wch:38},{wch:22},{wch:7},{wch:9},{wch:9},{wch:16},{wch:9},{wch:14}];
-    XLSX.utils.book_append_sheet(wb, wsPlan, 'Planning');
 
-    // ── HOJA 2: ACTIVIDAD COMERCIAL ─────────────────────────────
-    const actRows = [[
-      'Fecha plan.','Día semana','Llegada','Empresa','Municipio','CP',
-      'Estado visita','Fecha visita','Interlocutor','Interés (⭐)',
-      'Problema / Dolor','Servicios interesados','Próximo paso',
-      'Fecha seguimiento','Notas libres','Última actualización'
-    ]];
-    DATA.forEach(day => {
-      const dt      = new Date(day.date);
-      const fecha   = dt.toLocaleDateString('es-ES');
-      const diaSem  = dt.toLocaleDateString('es-ES', { weekday: 'long' });
-      day.clients.forEach(c => {
-        const n = notasMap.get(c.id) || {};
-        const servicios = Array.isArray(n.servicios) ? n.servicios.join(', ') : (n.servicios || '');
-        actRows.push([
-          fecha,
-          diaSem,
-          c.llegada,
-          c.nombre,
-          c.poblacion,
-          c.cp,
-          n.estado || c.estado || 'pendiente',
-          n.fecha_visita      || '',
-          n.interlocutor      || '',
-          n.interes ? '⭐'.repeat(n.interes) : '',
-          (n.dolor            || '').replace(/\n/g,' '),
-          servicios,
-          (n.proximo_paso     || '').replace(/\n/g,' '),
-          n.fecha_seguimiento || '',
-          (n.texto            || '').replace(/\n/g,' '),
-          n.actualizado_en ? new Date(n.actualizado_en).toLocaleDateString('es-ES') : ''
-        ]);
+    // ── HOJA RESUMEN ─────────────────────────────────────────────
+    {
+      const ws = wb.addWorksheet('Resumen');
+      ws.columns = [{ width: 22 }, { width: 14 }, { width: 12 }];
+
+      const totalC = DATA.reduce((s, d) => s + d.clients.length, 0);
+      const cnt = { pendiente: 0, pospuesta: 0, realizada: 0, 'no-interesado': 0 };
+      DATA.forEach(d => d.clients.forEach(c => {
+        const e = (notasMap.get(c.id) || {}).estado || 'pendiente';
+        if (cnt[e] !== undefined) cnt[e]++; else cnt.pendiente++;
+      }));
+
+      const titleRow = ws.addRow(['Resumen de actividad comercial']);
+      titleRow.getCell(1).font = { bold: true, size: 13, color: { argb: AZUL } };
+      ws.addRow([]);
+
+      const hRow = ws.addRow(['Estado', 'Nº clientes', '% del total']);
+      hRow.eachCell(c => headerStyle(c));
+
+      const filas = [
+        ['⚪ Pendiente',     cnt.pendiente,        'pendiente'],
+        ['🟠 Pospuesta',    cnt.pospuesta,        'pospuesta'],
+        ['🟢 Realizada',    cnt.realizada,        'realizada'],
+        ['🔴 No interesado',cnt['no-interesado'], 'no-interesado'],
+      ];
+      filas.forEach(([label, n, estado]) => {
+        const pct = totalC > 0 ? ((n / totalC) * 100).toFixed(1) + '%' : '0%';
+        const row = ws.addRow([label, n, pct]);
+        row.eachCell(cell => {
+          estadoFill(cell, estado);
+          cell.alignment = { vertical: 'middle' };
+        });
+        row.getCell(1).font = { bold: true };
       });
-    });
-    const wsAct = XLSX.utils.aoa_to_sheet(actRows);
-    wsAct['!cols'] = [{wch:12},{wch:12},{wch:9},{wch:38},{wch:20},{wch:7},{wch:14},{wch:12},{wch:20},{wch:11},{wch:30},{wch:30},{wch:30},{wch:14},{wch:40},{wch:14}];
-    XLSX.utils.book_append_sheet(wb, wsAct, 'Actividad Comercial');
 
-    // ── HOJA 3: RESUMEN ─────────────────────────────────────────
-    const totalClientes = DATA.reduce((s, d) => s + d.clients.length, 0);
-    const conteo = { pendiente: 0, pospuesta: 0, realizada: 0, 'no-interesado': 0, sinNota: 0 };
-    DATA.forEach(day => day.clients.forEach(c => {
-      const n = notasMap.get(c.id);
-      if (!n) { conteo.sinNota++; return; }
-      const e = n.estado || 'pendiente';
-      if (conteo[e] !== undefined) conteo[e]++; else conteo.pendiente++;
-    }));
+      ws.addRow([]);
+      const totRow = ws.addRow(['TOTAL', totalC, '100%']);
+      totRow.eachCell(c => { c.font = { bold: true }; });
+      ws.addRow([]);
+      ws.addRow(['Generado el', new Date().toLocaleDateString('es-ES', { day:'2-digit', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit' })]);
+    }
 
-    const sumRows = [
-      ['Resumen de actividad comercial'],
-      [],
-      ['Total clientes en planning', totalClientes],
-      [],
-      ['Estado', 'Nº clientes', '% del total'],
-      ['⚪ Pendiente',     conteo.pendiente,        ((conteo.pendiente / totalClientes)*100).toFixed(1)+'%'],
-      ['🟠 Pospuesta',    conteo.pospuesta,        ((conteo.pospuesta / totalClientes)*100).toFixed(1)+'%'],
-      ['🟢 Realizada',    conteo.realizada,        ((conteo.realizada / totalClientes)*100).toFixed(1)+'%'],
-      ['🔴 No interesado',conteo['no-interesado'], ((conteo['no-interesado'] / totalClientes)*100).toFixed(1)+'%'],
-      ['(Sin nota)',       conteo.sinNota,          ((conteo.sinNota / totalClientes)*100).toFixed(1)+'%'],
-      [],
-      ['Generado el', new Date().toLocaleDateString('es-ES', { day:'2-digit', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit' })]
-    ];
-    const wsSum = XLSX.utils.aoa_to_sheet(sumRows);
-    wsSum['!cols'] = [{wch:22},{wch:14},{wch:14}];
-    XLSX.utils.book_append_sheet(wb, wsSum, 'Resumen');
+    // ── HOJA ACTIVIDAD COMERCIAL (solo en modo completo) ─────────
+    if (tipo === 'completo') {
+      const ws = wb.addWorksheet('Actividad Comercial');
+      ws.views = [{ state: 'frozen', ySplit: 1 }];
 
-    XLSX.writeFile(wb, 'planning_bilboweb.xlsx');
+      const headers = [
+        'Fecha plan.','Día','Llegada','Empresa','Municipio','CP',
+        'Estado','Fecha visita','Interlocutor','Interés',
+        'Problema / Dolor','Servicios','Próximo paso',
+        'Seguimiento','Notas libres','Actualizado'
+      ];
+      ws.columns = [
+        {width:12},{width:12},{width:9},{width:38},{width:20},{width:7},
+        {width:14},{width:12},{width:20},{width:10},
+        {width:30},{width:30},{width:30},{width:12},{width:40},{width:12}
+      ];
+
+      const hRow = ws.addRow(headers);
+      hRow.height = 20;
+      hRow.eachCell(c => headerStyle(c));
+      ws.autoFilter = { from: 'A1', to: 'P1' };
+
+      let ri = 0;
+      DATA.forEach(day => {
+        const dt    = new Date(day.date);
+        const fecha = dt.toLocaleDateString('es-ES');
+        const diaN  = dt.toLocaleDateString('es-ES', { weekday: 'long' });
+
+        day.clients.forEach(c => {
+          const n        = notasMap.get(c.id) || {};
+          const estado   = n.estado || c.estado || 'pendiente';
+          const servicios = Array.isArray(n.servicios) ? n.servicios.join(', ') : (n.servicios || '');
+          const interes  = n.interes ? '⭐'.repeat(n.interes) : '';
+
+          const row = ws.addRow([
+            fecha, diaN, c.llegada, c.nombre, c.poblacion, c.cp,
+            estado,
+            n.fecha_visita      || '',
+            n.interlocutor      || '',
+            interes,
+            (n.dolor            || '').replace(/\n/g,' '),
+            servicios,
+            (n.proximo_paso     || '').replace(/\n/g,' '),
+            n.fecha_seguimiento || '',
+            (n.texto            || '').replace(/\n/g,' '),
+            n.actualizado_en ? new Date(n.actualizado_en).toLocaleDateString('es-ES') : ''
+          ]);
+          ri++;
+
+          row.eachCell((cell, col) => {
+            cell.alignment = { vertical: 'middle', wrapText: col >= 11 };
+            if (col === 7) estadoFill(cell, estado);  // columna Estado
+            else zebraFill(cell, ri);
+          });
+        });
+      });
+    }
+
+    // ── Generar y descargar ──────────────────────────────────────
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob   = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url    = URL.createObjectURL(blob);
+    const a      = document.createElement('a');
+    a.href       = url;
+    a.download   = tipo === 'planning' ? 'planning_semanal.xlsx' : 'actividad_comercial.xlsx';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
 
   } finally {
     if (btn) { btn.textContent = orig; btn.disabled = false; }
