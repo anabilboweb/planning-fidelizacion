@@ -267,9 +267,10 @@ function driveMinB(lat1, lon1, lat2, lon2) {
   const [tor,kph] = d<1?[1.7,15]:d<4?[1.5,25]:d<12?[1.4,42]:d<30?[1.3,65]:[1.2,80];
   return Math.max(1, Math.ceil(d*tor/kph*60));
 }
-/* Calcula minutos de vuelta a base rastreando dónde quedó el coche */
+/* Calcula vuelta a base rastreando dónde quedó el coche.
+   Devuelve { walk, drive, total } */
 function calcRetBase(clients) {
-  if (!clients || !clients.length) return 0;
+  if (!clients || !clients.length) return { walk: 0, drive: 0, total: 0 };
   let carLat = BASE.lat, carLon = BASE.lon;
   let lastLat = BASE.lat, lastLon = BASE.lon;
   for (const c of clients) {
@@ -278,7 +279,8 @@ function calcRetBase(clients) {
   }
   const mismo = Math.abs(lastLat-carLat)<1e-5 && Math.abs(lastLon-carLon)<1e-5;
   const walk  = mismo ? 0 : walkMinB(lastLat, lastLon, carLat, carLon);
-  return walk + driveMinB(carLat, carLon, BASE.lat, BASE.lon);
+  const drive = driveMinB(carLat, carLon, BASE.lat, BASE.lon);
+  return { walk, drive, total: walk + drive };
 }
 
 const map = L.map('map').setView([BASE.lat, BASE.lon], 10);
@@ -301,12 +303,17 @@ async function init() {
     const schedule = rows?.[0]?.schedule || {};
     DATA = (schedule.dias || []).map(d => {
       const clients = (d.clientes || []).map(c => ({ ...c }));
+      const rb      = calcRetBase(clients);
+      // retBase total: usar el de Supabase si existe, si no el calculado aquí
+      // retWalk / retDrive siempre los calculamos aquí para mostrar desglose
       return {
         date:      d.fecha,
         dateLabel: d.label,
         totalMin:  d.totalMin,
         color:     d.color,
-        retBase:   d.retBase || calcRetBase(clients),
+        retBase:   d.retBase || rb.total,
+        retWalk:   rb.walk,
+        retDrive:  rb.drive,
         clients
       };
     });
@@ -412,8 +419,11 @@ function buildSidebar() {
 
     const foot = document.createElement('div');
     foot.className = 'card-foot';
+    const retLabel = day.retWalk > 0
+      ? `🚶 ${day.retWalk}' + 🚗 ${day.retDrive}' vuelta a base`
+      : `🚗 ${day.retDrive} min vuelta a base`;
     foot.innerHTML = `<span>⏱ Total: ${(day.totalMin / 60).toFixed(1)} h</span>
-      <span>🏠 ${day.retBase} min vuelta a base</span>`;
+      <span>${retLabel}</span>`;
     body.appendChild(foot);
 
     card.appendChild(h);

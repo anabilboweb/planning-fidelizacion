@@ -21,7 +21,7 @@ jobs:
           cache: 'npm'
 
       - name: Instalar dependencias
-        run: npm install
+        run: npm ci
 
       - name: Regenerar planning
         run: node planning.js
