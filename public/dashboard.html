@@ -91,6 +91,17 @@
     /* Loading */
     #loading{position:fixed;inset:0;background:rgba(241,245,249,.85);display:flex;
              align-items:center;justify-content:center;z-index:9000;font-size:14px;color:#475569;}
+
+    /* Banner ejemplo */
+    #ejemplo-banner{display:none;background:#fffbeb;border:1px solid #fcd34d;border-radius:9px;
+                    padding:7px 14px;font-size:12px;color:#92400e;flex-shrink:0;
+                    align-items:center;gap:8px;}
+    #ejemplo-banner strong{font-weight:700;}
+
+    /* Datos de ejemplo: KPIs y números en tono más claro */
+    .modo-ejemplo .kpi .num{color:#93c5fd;}
+    .modo-ejemplo .kpi{opacity:.85;}
+    .modo-ejemplo #agenda-zona,.modo-ejemplo .chart-card,.modo-ejemplo #seg-card{opacity:.82;}
   </style>
 </head>
 <body>
@@ -156,6 +167,11 @@
 </nav>
 
 <div id="content">
+  <!-- Banner datos de ejemplo -->
+  <div id="ejemplo-banner">
+    ⚠️ <strong>Vista de ejemplo</strong> — sin datos reales. Cuando generes el planning y registres notas de visitas, aquí verás tu actividad real.
+  </div>
+
   <!-- ZONA 1: KPIs -->
   <div id="kpis">
     <div class="kpi"><div class="num" id="kpi-ruta">—</div><div class="lbl">Clientes en ruta</div></div>
@@ -345,6 +361,83 @@ let NOTAS_MAP = new Map();
 let agendaIdx = 0;
 let donutChart = null;
 let barrasChart = null;
+let MODO_EJEMPLO = false;
+
+/* ── Datos de ejemplo (solo cuando no hay datos reales) ── */
+function getMockData() {
+  function addDays(d, n) { const r = new Date(d); r.setDate(r.getDate() + n); return r; }
+  function iso(d) { return d.toISOString().slice(0, 10); }
+  const hoy = new Date();
+  const diasSem = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+
+  // Saltamos fines de semana para los días del planning
+  function diaLab(offset) {
+    const d = addDays(hoy, offset);
+    return d;
+  }
+  // Construir 4 días laborables a partir de hoy
+  const labDays = [];
+  for (let i = 0, offset = 0; i < 4; offset++) {
+    const d = addDays(hoy, offset);
+    if (d.getDay() !== 0 && d.getDay() !== 6) { labDays.push(d); i++; }
+  }
+
+  const dias = [
+    {
+      fecha: iso(labDays[0]), label: diasSem[labDays[0].getDay()],
+      clientes: [
+        { id:'ex-1', nombre:'Talleres López S.L.',      poblacion:'Basauri',   cp:'48970', llegada:'09:00', salida:'10:00' },
+        { id:'ex-2', nombre:'Metalúrgica Norte',         poblacion:'Barakaldo', cp:'48901', llegada:'10:30', salida:'11:30' },
+        { id:'ex-3', nombre:'Distribuciones Txori',      poblacion:'Bilbao',    cp:'48003', llegada:'12:15', salida:'13:15' },
+      ]
+    },
+    {
+      fecha: iso(labDays[1]), label: diasSem[labDays[1].getDay()],
+      clientes: [
+        { id:'ex-4', nombre:'Industrias Begoña',         poblacion:'Galdakao',  cp:'48960', llegada:'09:30', salida:'10:30' },
+        { id:'ex-5', nombre:'Pinturas Nervión',           poblacion:'Bilbao',    cp:'48007', llegada:'11:00', salida:'12:00' },
+      ]
+    },
+    {
+      fecha: iso(labDays[2]), label: diasSem[labDays[2].getDay()],
+      clientes: [
+        { id:'ex-6', nombre:'Carpintería Urdaibai',       poblacion:'Bermeo',    cp:'48370', llegada:'09:00', salida:'10:00' },
+        { id:'ex-7', nombre:'Ferretería Zubizarreta',     poblacion:'Getxo',     cp:'48930', llegada:'11:00', salida:'12:00' },
+      ]
+    },
+    {
+      fecha: iso(labDays[3]), label: diasSem[labDays[3].getDay()],
+      clientes: [
+        { id:'ex-8', nombre:'Suministros Bizkaia',        poblacion:'Sestao',    cp:'48910', llegada:'10:00', salida:'11:00' },
+      ]
+    }
+  ];
+
+  // Notas — mezcla de estados y fechas para poblar todos los widgets
+  const notas = [
+    { cliente_id:'ex-1', estado:'realizada',     fecha_visita: iso(hoy),               fecha_seguimiento: null },
+    { cliente_id:'ex-2', estado:'pospuesta',      fecha_visita: null,                   fecha_seguimiento: iso(addDays(hoy,5)) },
+    { cliente_id:'ex-3', estado:'pendiente',      fecha_visita: null,                   fecha_seguimiento: null },
+    { cliente_id:'ex-4', estado:'realizada',      fecha_visita: iso(addDays(hoy,-4)),   fecha_seguimiento: null },
+    { cliente_id:'ex-5', estado:'no-interesado',  fecha_visita: iso(addDays(hoy,-4)),   fecha_seguimiento: null },
+    { cliente_id:'ex-6', estado:'pendiente',      fecha_visita: null,                   fecha_seguimiento: iso(addDays(hoy,10)) },
+    { cliente_id:'ex-7', estado:'pospuesta',      fecha_visita: null,                   fecha_seguimiento: iso(addDays(hoy,3)) },
+    { cliente_id:'ex-8', estado:'pendiente',      fecha_visita: null,                   fecha_seguimiento: null },
+    // Historial de semanas anteriores para las barras
+    { cliente_id:'ex-h1', estado:'realizada',     fecha_visita: iso(addDays(hoy,-7)),   fecha_seguimiento: null },
+    { cliente_id:'ex-h2', estado:'realizada',     fecha_visita: iso(addDays(hoy,-8)),   fecha_seguimiento: null },
+    { cliente_id:'ex-h3', estado:'pospuesta',     fecha_visita: iso(addDays(hoy,-9)),   fecha_seguimiento: null },
+    { cliente_id:'ex-h4', estado:'realizada',     fecha_visita: iso(addDays(hoy,-14)),  fecha_seguimiento: null },
+    { cliente_id:'ex-h5', estado:'realizada',     fecha_visita: iso(addDays(hoy,-15)),  fecha_seguimiento: null },
+    { cliente_id:'ex-h6', estado:'no-interesado', fecha_visita: iso(addDays(hoy,-16)),  fecha_seguimiento: null },
+    { cliente_id:'ex-h7', estado:'realizada',     fecha_visita: iso(addDays(hoy,-21)),  fecha_seguimiento: null },
+    { cliente_id:'ex-h8', estado:'realizada',     fecha_visita: iso(addDays(hoy,-22)),  fecha_seguimiento: null },
+    { cliente_id:'ex-h9', estado:'pospuesta',     fecha_visita: iso(addDays(hoy,-28)),  fecha_seguimiento: null },
+    { cliente_id:'ex-h10',estado:'realizada',     fecha_visita: iso(addDays(hoy,-35)),  fecha_seguimiento: null },
+  ];
+
+  return { dias, notas };
+}
 
 /* ── Carga principal ── */
 async function cargarDatos() {
@@ -359,20 +452,34 @@ async function cargarDatos() {
     const { data: notasArr, error: e2 } = await sb.from('notas').select('*');
     if (e2) throw new Error('notas: ' + e2.message);
 
+    let notasFinal = notasArr || [];
+
+    // Si no hay datos reales, inyectar datos de ejemplo
+    const sinDatos = DIAS.length === 0 && notasFinal.filter(n => n.cliente_id).length === 0;
+    if (sinDatos) {
+      MODO_EJEMPLO = true;
+      const mock = getMockData();
+      DIAS      = mock.dias;
+      notasFinal = mock.notas;
+      const banner = document.getElementById('ejemplo-banner');
+      banner.style.display = 'flex';
+      document.getElementById('content').classList.add('modo-ejemplo');
+    }
+
     // clave del mapa = cliente_id (no id, que es auto-increment)
-    NOTAS_MAP = new Map((notasArr || []).map(n => [n.cliente_id, n]));
+    NOTAS_MAP = new Map(notasFinal.map(n => [n.cliente_id, n]));
 
     const clienteMap = new Map();
     DIAS.forEach(d => (d.clientes || []).forEach(c => clienteMap.set(c.id, c)));
 
     document.getElementById('loading').style.display = 'none';
 
-    renderKPIs(notasArr || []);
+    renderKPIs(notasFinal);
     agendaIdx = hoyIndex();
     renderAgenda();
     renderDonut();
-    renderBarras(notasArr || []);
-    renderSeguimientos(notasArr || [], clienteMap);
+    renderBarras(notasFinal);
+    renderSeguimientos(notasFinal, clienteMap);
   } catch (err) {
     document.getElementById('loading').textContent = '❌ Error cargando datos: ' + err.message;
     console.error('cargarDatos:', err);
