@@ -340,24 +340,35 @@ let barrasChart = null;
 
 /* ── Carga principal ── */
 async function cargarDatos() {
-  const { data: rows } = await sb.from('planning_schedule').select('schedule').order('id', { ascending: false }).limit(1);
-  const schedule = rows?.[0]?.schedule || {};
-  DIAS = schedule.dias || [];
+  try {
+    const { data: rows, error: e1 } = await sb
+      .from('planning_schedule').select('schedule')
+      .order('id', { ascending: false }).limit(1);
+    if (e1) throw new Error('planning_schedule: ' + e1.message);
+    const schedule = rows?.[0]?.schedule || {};
+    DIAS = schedule.dias || [];
 
-  const { data: notasArr } = await sb.from('notas').select('*');
-  NOTAS_MAP = new Map((notasArr || []).map(n => [n.id, n]));
+    const { data: notasArr, error: e2 } = await sb.from('notas').select('*');
+    if (e2) throw new Error('notas: ' + e2.message);
 
-  const clienteMap = new Map();
-  DIAS.forEach(d => (d.clientes || []).forEach(c => clienteMap.set(c.id, c)));
+    // clave del mapa = cliente_id (no id, que es auto-increment)
+    NOTAS_MAP = new Map((notasArr || []).map(n => [n.cliente_id, n]));
 
-  document.getElementById('loading').style.display = 'none';
+    const clienteMap = new Map();
+    DIAS.forEach(d => (d.clientes || []).forEach(c => clienteMap.set(c.id, c)));
 
-  renderKPIs(notasArr || []);
-  agendaIdx = hoyIndex();
-  renderAgenda();
-  renderDonut();
-  renderBarras(notasArr || []);
-  renderSeguimientos(notasArr || [], clienteMap);
+    document.getElementById('loading').style.display = 'none';
+
+    renderKPIs(notasArr || []);
+    agendaIdx = hoyIndex();
+    renderAgenda();
+    renderDonut();
+    renderBarras(notasArr || []);
+    renderSeguimientos(notasArr || [], clienteMap);
+  } catch (err) {
+    document.getElementById('loading').textContent = '❌ Error cargando datos: ' + err.message;
+    console.error('cargarDatos:', err);
+  }
 }
 
 /* ── KPIs ── */
@@ -566,8 +577,8 @@ async function renderSeguimientos(notasArr, clienteMap) {
 
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
   tbody.innerHTML = proximas.map(n => {
-    const cliente = clienteMap.get(n.id);
-    const nombre = cliente?.nombre || `Cliente ${n.id}`;
+    const cliente = clienteMap.get(n.cliente_id);
+    const nombre = cliente?.nombre || `Cliente ${n.cliente_id || n.id}`;
     const estado = n.estado || 'pendiente';
     const badgeClass = 'ag-badge badge-' + estado;
     const fs = new Date(n.fecha_seguimiento); fs.setHours(0, 0, 0, 0);
