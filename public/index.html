@@ -560,6 +560,106 @@ async function downloadExcel(tipo) {
       weeks.get(wKey).push(day);
     });
 
+    // ── HOJA ACTIVIDAD COMERCIAL (solo en modo completo, va primera) ─────────
+    if (tipo === 'completo') {
+      const ws = wb.addWorksheet('Actividad Comercial');
+      ws.views = [{ state: 'frozen', ySplit: 1 }];
+
+      const headers = [
+        'Fecha plan.','Día','Llegada','Empresa','Municipio','CP',
+        'Estado','Fecha visita','Interlocutor','Interés',
+        'Problema / Dolor','Servicios','Próximo paso',
+        'Seguimiento','Notas libres','Actualizado'
+      ];
+      ws.columns = [
+        {width:12},{width:12},{width:9},{width:38},{width:20},{width:7},
+        {width:14},{width:12},{width:20},{width:10},
+        {width:30},{width:30},{width:30},{width:12},{width:40},{width:12}
+      ];
+
+      const hRow = ws.addRow(headers);
+      hRow.height = 20;
+      hRow.eachCell(c => headerStyle(c));
+      ws.autoFilter = { from: 'A1', to: 'P1' };
+
+      let ri = 0;
+      DATA.forEach(day => {
+        const dt    = new Date(day.date);
+        const fecha = dt.toLocaleDateString('es-ES');
+        const diaN  = dt.toLocaleDateString('es-ES', { weekday: 'long' });
+
+        day.clients.forEach(c => {
+          const n        = notasMap.get(c.id) || {};
+          const estado   = n.estado || c.estado || 'pendiente';
+          const servicios = Array.isArray(n.servicios) ? n.servicios.join(', ') : (n.servicios || '');
+          const interes  = n.interes ? '⭐'.repeat(n.interes) : '';
+
+          const row = ws.addRow([
+            fecha, diaN, c.llegada, c.nombre, c.poblacion, c.cp,
+            estado,
+            n.fecha_visita      || '',
+            n.interlocutor      || '',
+            interes,
+            (n.dolor            || '').replace(/\n/g,' '),
+            servicios,
+            (n.proximo_paso     || '').replace(/\n/g,' '),
+            n.fecha_seguimiento || '',
+            (n.texto            || '').replace(/\n/g,' '),
+            n.actualizado_en ? new Date(n.actualizado_en).toLocaleDateString('es-ES') : ''
+          ]);
+          ri++;
+
+          row.eachCell((cell, col) => {
+            cell.alignment = { vertical: 'middle', wrapText: col >= 11 };
+            if (col === 7) estadoFill(cell, estado);  // columna Estado
+            else zebraFill(cell, ri);
+          });
+        });
+      });
+    }
+
+    // ── HOJA RESUMEN ─────────────────────────────────────────────
+    {
+      const ws = wb.addWorksheet('Resumen');
+      ws.columns = [{ width: 22 }, { width: 14 }, { width: 12 }];
+
+      const totalC = DATA.reduce((s, d) => s + d.clients.length, 0);
+      const cnt = { pendiente: 0, pospuesta: 0, realizada: 0, 'no-interesado': 0 };
+      DATA.forEach(d => d.clients.forEach(c => {
+        const e = (notasMap.get(c.id) || {}).estado || 'pendiente';
+        if (cnt[e] !== undefined) cnt[e]++; else cnt.pendiente++;
+      }));
+
+      const titleRow = ws.addRow(['Resumen de actividad comercial']);
+      titleRow.getCell(1).font = { bold: true, size: 13, color: { argb: AZUL } };
+      ws.addRow([]);
+
+      const hRow = ws.addRow(['Estado', 'Nº clientes', '% del total']);
+      hRow.eachCell(c => headerStyle(c));
+
+      const filas = [
+        ['⚪ Pendiente',     cnt.pendiente,        'pendiente'],
+        ['🟠 Pospuesta',    cnt.pospuesta,        'pospuesta'],
+        ['🟢 Realizada',    cnt.realizada,        'realizada'],
+        ['🔴 No interesado',cnt['no-interesado'], 'no-interesado'],
+      ];
+      filas.forEach(([label, n, estado]) => {
+        const pct = totalC > 0 ? ((n / totalC) * 100).toFixed(1) + '%' : '0%';
+        const row = ws.addRow([label, n, pct]);
+        row.eachCell(cell => {
+          estadoFill(cell, estado);
+          cell.alignment = { vertical: 'middle' };
+        });
+        row.getCell(1).font = { bold: true };
+      });
+
+      ws.addRow([]);
+      const totRow = ws.addRow(['TOTAL', totalC, '100%']);
+      totRow.eachCell(c => { c.font = { bold: true }; });
+      ws.addRow([]);
+      ws.addRow(['Generado el', new Date().toLocaleDateString('es-ES', { day:'2-digit', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit' })]);
+    }
+
     // ── HOJAS SEMANALES ─────────────────────────────────────────
     for (const [wKey, days] of weeks) {
       const ws = wb.addWorksheet(wKey);
@@ -618,106 +718,6 @@ async function downloadExcel(tipo) {
         ws.addRow([]);
         dataRowIdx++;
       }
-    }
-
-    // ── HOJA RESUMEN ─────────────────────────────────────────────
-    {
-      const ws = wb.addWorksheet('Resumen');
-      ws.columns = [{ width: 22 }, { width: 14 }, { width: 12 }];
-
-      const totalC = DATA.reduce((s, d) => s + d.clients.length, 0);
-      const cnt = { pendiente: 0, pospuesta: 0, realizada: 0, 'no-interesado': 0 };
-      DATA.forEach(d => d.clients.forEach(c => {
-        const e = (notasMap.get(c.id) || {}).estado || 'pendiente';
-        if (cnt[e] !== undefined) cnt[e]++; else cnt.pendiente++;
-      }));
-
-      const titleRow = ws.addRow(['Resumen de actividad comercial']);
-      titleRow.getCell(1).font = { bold: true, size: 13, color: { argb: AZUL } };
-      ws.addRow([]);
-
-      const hRow = ws.addRow(['Estado', 'Nº clientes', '% del total']);
-      hRow.eachCell(c => headerStyle(c));
-
-      const filas = [
-        ['⚪ Pendiente',     cnt.pendiente,        'pendiente'],
-        ['🟠 Pospuesta',    cnt.pospuesta,        'pospuesta'],
-        ['🟢 Realizada',    cnt.realizada,        'realizada'],
-        ['🔴 No interesado',cnt['no-interesado'], 'no-interesado'],
-      ];
-      filas.forEach(([label, n, estado]) => {
-        const pct = totalC > 0 ? ((n / totalC) * 100).toFixed(1) + '%' : '0%';
-        const row = ws.addRow([label, n, pct]);
-        row.eachCell(cell => {
-          estadoFill(cell, estado);
-          cell.alignment = { vertical: 'middle' };
-        });
-        row.getCell(1).font = { bold: true };
-      });
-
-      ws.addRow([]);
-      const totRow = ws.addRow(['TOTAL', totalC, '100%']);
-      totRow.eachCell(c => { c.font = { bold: true }; });
-      ws.addRow([]);
-      ws.addRow(['Generado el', new Date().toLocaleDateString('es-ES', { day:'2-digit', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit' })]);
-    }
-
-    // ── HOJA ACTIVIDAD COMERCIAL (solo en modo completo) ─────────
-    if (tipo === 'completo') {
-      const ws = wb.addWorksheet('Actividad Comercial');
-      ws.views = [{ state: 'frozen', ySplit: 1 }];
-
-      const headers = [
-        'Fecha plan.','Día','Llegada','Empresa','Municipio','CP',
-        'Estado','Fecha visita','Interlocutor','Interés',
-        'Problema / Dolor','Servicios','Próximo paso',
-        'Seguimiento','Notas libres','Actualizado'
-      ];
-      ws.columns = [
-        {width:12},{width:12},{width:9},{width:38},{width:20},{width:7},
-        {width:14},{width:12},{width:20},{width:10},
-        {width:30},{width:30},{width:30},{width:12},{width:40},{width:12}
-      ];
-
-      const hRow = ws.addRow(headers);
-      hRow.height = 20;
-      hRow.eachCell(c => headerStyle(c));
-      ws.autoFilter = { from: 'A1', to: 'P1' };
-
-      let ri = 0;
-      DATA.forEach(day => {
-        const dt    = new Date(day.date);
-        const fecha = dt.toLocaleDateString('es-ES');
-        const diaN  = dt.toLocaleDateString('es-ES', { weekday: 'long' });
-
-        day.clients.forEach(c => {
-          const n        = notasMap.get(c.id) || {};
-          const estado   = n.estado || c.estado || 'pendiente';
-          const servicios = Array.isArray(n.servicios) ? n.servicios.join(', ') : (n.servicios || '');
-          const interes  = n.interes ? '⭐'.repeat(n.interes) : '';
-
-          const row = ws.addRow([
-            fecha, diaN, c.llegada, c.nombre, c.poblacion, c.cp,
-            estado,
-            n.fecha_visita      || '',
-            n.interlocutor      || '',
-            interes,
-            (n.dolor            || '').replace(/\n/g,' '),
-            servicios,
-            (n.proximo_paso     || '').replace(/\n/g,' '),
-            n.fecha_seguimiento || '',
-            (n.texto            || '').replace(/\n/g,' '),
-            n.actualizado_en ? new Date(n.actualizado_en).toLocaleDateString('es-ES') : ''
-          ]);
-          ri++;
-
-          row.eachCell((cell, col) => {
-            cell.alignment = { vertical: 'middle', wrapText: col >= 11 };
-            if (col === 7) estadoFill(cell, estado);  // columna Estado
-            else zebraFill(cell, ri);
-          });
-        });
-      });
     }
 
     // ── Generar y descargar ──────────────────────────────────────
