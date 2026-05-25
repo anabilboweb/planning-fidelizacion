@@ -309,9 +309,6 @@ function mostrarLogin() {
   document.getElementById('login-overlay').style.display = 'flex';
 }
 
-function iniciarApp() {
-  cargarDatos();
-}
 
 /* ── Utilidades ── */
 function isoWeek(date) {
@@ -439,50 +436,64 @@ function getMockData() {
   return { dias, notas };
 }
 
-/* ── Carga principal ── */
+/* ── Render helper compartido ── */
+function renderTodo(notasArr, clienteMap) {
+  renderKPIs(notasArr);
+  agendaIdx = hoyIndex();
+  renderAgenda();
+  renderDonut();
+  renderBarras(notasArr);
+  renderSeguimientos(notasArr, clienteMap);
+}
+
+/* ── Render inmediato con datos de ejemplo ── */
+function renderConMock() {
+  const mock = getMockData();
+  DIAS = mock.dias;
+  NOTAS_MAP = new Map(mock.notas.map(n => [n.cliente_id, n]));
+  const clienteMap = new Map();
+  DIAS.forEach(d => (d.clientes || []).forEach(c => clienteMap.set(c.id, c)));
+
+  MODO_EJEMPLO = true;
+  document.getElementById('ejemplo-banner').style.display = 'flex';
+  document.getElementById('content').classList.add('modo-ejemplo');
+  document.getElementById('loading').style.display = 'none';
+
+  renderTodo(mock.notas, clienteMap);
+}
+
+/* ── Carga de datos reales (en background, tras mostrar mock) ── */
 async function cargarDatos() {
   try {
     const { data: rows, error: e1 } = await sb
       .from('planning_schedule').select('schedule')
       .order('id', { ascending: false }).limit(1);
-    if (e1) throw new Error('planning_schedule: ' + e1.message);
+    if (e1) { console.warn('planning_schedule:', e1.message); return; }
+
     const schedule = rows?.[0]?.schedule || {};
-    DIAS = schedule.dias || [];
+    const diasReales = schedule.dias || [];
 
     const { data: notasArr, error: e2 } = await sb.from('notas').select('*');
-    if (e2) throw new Error('notas: ' + e2.message);
+    if (e2) { console.warn('notas:', e2.message); return; }
 
-    let notasFinal = notasArr || [];
+    const notasReales = notasArr || [];
+    const hayDatos = diasReales.length > 0 || notasReales.some(n => n.cliente_id);
+    if (!hayDatos) return; // sin datos reales → mantener mock
 
-    // Si no hay datos reales, inyectar datos de ejemplo
-    const sinDatos = DIAS.length === 0 && notasFinal.filter(n => n.cliente_id).length === 0;
-    if (sinDatos) {
-      MODO_EJEMPLO = true;
-      const mock = getMockData();
-      DIAS      = mock.dias;
-      notasFinal = mock.notas;
-      const banner = document.getElementById('ejemplo-banner');
-      banner.style.display = 'flex';
-      document.getElementById('content').classList.add('modo-ejemplo');
-    }
-
-    // clave del mapa = cliente_id (no id, que es auto-increment)
-    NOTAS_MAP = new Map(notasFinal.map(n => [n.cliente_id, n]));
-
+    // Hay datos reales → quitar modo ejemplo y re-renderizar
+    MODO_EJEMPLO = false;
+    DIAS = diasReales;
+    NOTAS_MAP = new Map(notasReales.map(n => [n.cliente_id, n]));
     const clienteMap = new Map();
     DIAS.forEach(d => (d.clientes || []).forEach(c => clienteMap.set(c.id, c)));
 
-    document.getElementById('loading').style.display = 'none';
+    document.getElementById('ejemplo-banner').style.display = 'none';
+    document.getElementById('content').classList.remove('modo-ejemplo');
 
-    renderKPIs(notasFinal);
-    agendaIdx = hoyIndex();
-    renderAgenda();
-    renderDonut();
-    renderBarras(notasFinal);
-    renderSeguimientos(notasFinal, clienteMap);
+    renderTodo(notasReales, clienteMap);
   } catch (err) {
-    document.getElementById('loading').textContent = '❌ Error cargando datos: ' + err.message;
     console.error('cargarDatos:', err);
+    // En caso de error mantenemos el mock sin romper nada
   }
 }
 
@@ -720,8 +731,15 @@ async function renderSeguimientos(notasArr, clienteMap) {
 
 /* ── Arranque ── */
 (async () => {
+  // 1. Mostrar mock inmediatamente — la página nunca se queda en blanco
+  renderConMock();
+
+  // 2. Comprobar auth (el login overlay aparece encima si no hay sesión)
   const ok = await checkAuth();
-  if (ok) iniciarApp();
+  if (!ok) return;
+
+  // 3. Cargar datos reales en background y reemplazar mock si existen
+  await cargarDatos();
 })();
 </script>
 </body>
