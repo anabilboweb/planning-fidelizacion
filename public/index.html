@@ -312,7 +312,6 @@ async function init() {
 
     buildMarkers();
     buildSidebar();
-    if (DATA.length) openDay(0);
   } catch (e) {
     document.getElementById('hdr').innerHTML += `<p style="color:#fca5a5;margin-top:6px">Error: ${e.message}</p>`;
   }
