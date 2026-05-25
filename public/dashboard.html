@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
   <title>BilboWeb · Dashboard</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
   <style>
     *{box-sizing:border-box;margin:0;padding:0;}
     body{font-family:'Segoe UI',Arial,sans-serif;display:flex;flex-direction:column;
@@ -215,7 +215,15 @@
 </div>
 
 <script>
-Chart.register(...Chart.registerables);
+// Chart.register se llama la primera vez que se usan los gráficos,
+// para evitar que un fallo de carga de Chart.js rompa todo el script.
+let _chartRegistered = false;
+function ensureChart() {
+  if (_chartRegistered) return true;
+  if (typeof Chart === 'undefined') return false;
+  try { Chart.register(...Chart.registerables); _chartRegistered = true; return true; }
+  catch(e) { console.warn('Chart.register falló:', e); return false; }
+}
 
 const { createClient } = supabase;
 const sb = createClient(
@@ -480,6 +488,10 @@ function renderAgenda() {
 
 /* ── Donut ── */
 function renderDonut() {
+  if (!ensureChart()) {
+    document.getElementById('donut-wrap').innerHTML = '<span style="color:#94a3b8;font-size:12px">Gráfica no disponible</span>';
+    return;
+  }
   const conteo = { pendiente: 0, pospuesta: 0, realizada: 0, 'no-interesado': 0 };
   DIAS.forEach(d => (d.clientes || []).forEach(c => {
     const estado = NOTAS_MAP.get(c.id)?.estado || c.estado || 'pendiente';
@@ -519,6 +531,10 @@ function renderDonut() {
 
 /* ── Barras semanales ── */
 function renderBarras(notasArr) {
+  if (!ensureChart()) {
+    document.getElementById('barras-canvas-wrap').innerHTML = '<span style="color:#94a3b8;font-size:12px">Gráfica no disponible</span>';
+    return;
+  }
   const hoy = new Date();
   const semanas = [];
   for (let i = 5; i >= 0; i--) {
