@@ -96,6 +96,23 @@
 </head>
 <body>
 
+<div id="reset-overlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.85);z-index:99999;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:16px;padding:36px 40px;width:340px;box-shadow:0 20px 60px rgba(0,0,0,.3);">
+    <div style="text-align:center;margin-bottom:24px;">
+      <div style="font-size:32px;margin-bottom:8px;">🔑</div>
+      <h2 style="font-size:20px;font-weight:800;color:#1e293b;margin:0">Nueva contraseña</h2>
+    </div>
+    <div style="margin-bottom:14px;">
+      <label style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px">Nueva contraseña</label>
+      <input id="reset-pass" type="password" placeholder="••••••••"
+        style="width:100%;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:14px;outline:none;box-sizing:border-box;"
+        onkeydown="if(event.key==='Enter')guardarNuevaPass()">
+    </div>
+    <div id="reset-error" style="display:none;background:#fee2e2;border:1px solid #fca5a5;color:#991b1b;padding:8px 12px;border-radius:8px;font-size:13px;margin-bottom:14px;"></div>
+    <button onclick="guardarNuevaPass()" style="width:100%;padding:12px;background:#1a56db;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer;">Guardar contraseña</button>
+  </div>
+</div>
+
 <div id="login-overlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.85);z-index:99999;align-items:center;justify-content:center;flex-direction:column;">
   <div style="background:#fff;border-radius:16px;padding:36px 40px;width:340px;box-shadow:0 20px 60px rgba(0,0,0,.3);">
     <div style="text-align:center;margin-bottom:24px;">
@@ -163,12 +180,39 @@ const sb = createClient(
 );
 
 async function checkAuth() {
+  // Detectar flujo de recuperación de contraseña
+  const hash = window.location.hash;
+  if (hash.includes('type=recovery')) {
+    const el = document.getElementById('reset-overlay');
+    el.style.display = 'flex';
+    return false;
+  }
   const { data: { session } } = await sb.auth.getSession();
   if (!session) {
     mostrarLogin();
     return false;
   }
   return true;
+}
+
+async function guardarNuevaPass() {
+  const pass  = document.getElementById('reset-pass').value;
+  const errEl = document.getElementById('reset-error');
+  errEl.style.display = 'none';
+  if (pass.length < 6) {
+    errEl.textContent = 'La contraseña debe tener al menos 6 caracteres';
+    errEl.style.display = 'block';
+    return;
+  }
+  const { error } = await sb.auth.updateUser({ password: pass });
+  if (error) {
+    errEl.textContent = '❌ Error: ' + error.message;
+    errEl.style.display = 'block';
+  } else {
+    document.getElementById('reset-overlay').style.display = 'none';
+    window.location.hash = '';
+    iniciarApp();
+  }
 }
 
 async function loginUser() {
