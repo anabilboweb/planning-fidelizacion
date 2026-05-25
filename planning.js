@@ -43,6 +43,10 @@ function parseFechaInicio(valor) {
 const ORS_API_KEY     = process.argv[2] || process.env.ORS_API_KEY || '';
 const CSV_FILE        = path.join(__dirname, 'fidelizacion_clean.csv');
 const CACHE_FILE      = path.join(__dirname, 'geocoding_cache.json');
+// Modo cloud (GitHub Actions) — no hay ficheros locales
+const IS_CLOUD = !!process.env.GITHUB_ACTIONS;
+// URL Supabase — env var tiene prioridad sobre config.json
+const SUPA_URL = process.env.SUPABASE_URL || 'https://mwrkidkvjyrcuexxkhbv.supabase.co';
 const EXCEL_OUT       = path.join(__dirname, 'planning_visitas.xlsx');
 const HTML_OUT        = path.join(__dirname, 'planning_mapa.html');
 
@@ -215,37 +219,116 @@ async function geocodeCliente(c) {
   return { lat: null, lon: null, ok: false, fallback: false };
 }
 
+// ──────────────────────────────────────────────────────────────
+// CARGAR CLIENTES DESDE SUPABASE
+// ──────────────────────────────────────────────────────────────
+async function loadClientesFromSupabase() {
+  const supaKey = process.env.SUPABASE_SERVICE_KEY || CFG.supabaseServiceKey || CFG.supabaseAnonKey || '';
+  if (!supaKey) throw new Error('Sin clave Supabase para cargar clientes');
+  const r = await fetch(`${SUPA_URL}/rest/v1/clientes?activo=eq.true&select=*&order=nombre.asc`, {
+    headers: { 'apikey': supaKey, 'Authorization': `Bearer ${supaKey}` }
+  });
+  if (!r.ok) throw new Error('Error leyendo clientes: ' + r.status + ' ' + await r.text());
+  const rows = await r.json();
+
+  // Aplicar mismos filtros que parseCSV
+  return rows.filter(c => {
+    if (!c.nombre) return false;
+    if (EXCLUIR_CLIENTES.has(c.nombre.toLowerCase())) return false;
+    if (SOLO_MUNICIPIOS.length > 0) {
+      const pob = (c.poblacion || '').toLowerCase();
+      if (!SOLO_MUNICIPIOS.some(m => pob.includes(m))) return false;
+    }
+    if (SOLO_CPS.size > 0 && !SOLO_CPS.has(c.cp || '')) return false;
+    return true;
+  }).map(c => ({
+    'Nombre':         c.nombre,
+    'Dirección':      c.direccion || '',
+    'Población':      c.poblacion || '',
+    'Código postal':  c.cp || '',
+    'Provincia':      c.provincia || '',
+    lat:  c.lat  || null,
+    lon:  c.lon  || null,
+    ok:   !!(c.lat && c.lon),
+    id:   c.id
+  }));
+}
+
 async function geocodeAll(clientes) {
+  const supaKey = process.env.SUPABASE_SERVICE_KEY || CFG.supabaseServiceKey || CFG.supabaseAnonKey || '';
+
+  // Caché local (solo en modo local)
   let cache = {};
-  if (fs.existsSync(CACHE_FILE)) {
-    cache = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf-8'));
-    console.log(`   📦 Caché existente: ${Object.keys(cache).length} registros`);
+  if (!IS_CLOUD && fs.existsSync(CACHE_FILE)) {
+    try { cache = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf-8')); } catch(e) {}
+    console.log(`   📦 Caché local: ${Object.keys(cache).length} registros`);
   }
 
   let newCount = 0;
+  const toUpdateSupabase = []; // {id, lat, lon} — nuevas geocodificaciones
+
   for (let i = 0; i < clientes.length; i++) {
     const c   = clientes[i];
-    const key = `${c['Nombre']}|${c['Dirección']}|${c['Código postal']}`;
 
-    if (cache[key]) {
-      Object.assign(c, cache[key]);
-      if (!c.id) c.id = clienteId(c);  // compatibilidad con cache antiguo
+    // Ya tiene coordenadas (cargadas de Supabase)
+    if (c.lat && c.lon) {
+      c.ok = true;
       continue;
     }
 
+    // Buscar en caché local
+    const key = `${c['Nombre']}|${c['Dirección']}|${c['Código postal']}`;
+    if (cache[key]) {
+      Object.assign(c, cache[key]);
+      if (!c.id) c.id = clienteId(c);
+      if (c.lat && c.lon) {
+        c.ok = true;
+        toUpdateSupabase.push({ id: c.id, lat: c.lat, lon: c.lon });
+      }
+      continue;
+    }
+
+    // Geocodificar
     process.stdout.write(`\r   🌍 ${i+1}/${clientes.length}: ${c['Nombre'].substring(0,45).padEnd(45,' ')}`);
     const r = await geocodeCliente(c);
     Object.assign(c, r);
-    c.id = clienteId(c);
+    if (!c.id) c.id = clienteId(c);
     r.id = c.id;
     cache[key] = r;
     newCount++;
 
-    if (newCount % 10 === 0)
+    if (c.lat && c.lon) {
+      c.ok = true;
+      toUpdateSupabase.push({ id: c.id, lat: c.lat, lon: c.lon });
+    }
+
+    // Guardar caché local cada 10
+    if (!IS_CLOUD && newCount % 10 === 0)
       fs.writeFileSync(CACHE_FILE, JSON.stringify(cache, null, 2), 'utf-8');
   }
 
-  fs.writeFileSync(CACHE_FILE, JSON.stringify(cache, null, 2), 'utf-8');
+  // Guardar caché local
+  if (!IS_CLOUD && newCount > 0)
+    fs.writeFileSync(CACHE_FILE, JSON.stringify(cache, null, 2), 'utf-8');
+
+  // Actualizar coordenadas en Supabase
+  if (toUpdateSupabase.length && supaKey) {
+    process.stdout.write('\n');
+    console.log(`   💾 Guardando ${toUpdateSupabase.length} coordenadas en Supabase…`);
+    for (const upd of toUpdateSupabase) {
+      try {
+        await fetch(`${SUPA_URL}/rest/v1/clientes?id=eq.${encodeURIComponent(upd.id)}`, {
+          method: 'PATCH',
+          headers: {
+            'apikey': supaKey, 'Authorization': `Bearer ${supaKey}`,
+            'Content-Type': 'application/json', 'Prefer': 'return=minimal'
+          },
+          body: JSON.stringify({ lat: upd.lat, lon: upd.lon })
+        });
+      } catch(e) { /* no crítico */ }
+    }
+  }
+
   process.stdout.write('\n');
   console.log(`   ✅ Nuevas geocodificaciones: ${newCount}`);
 
@@ -1734,8 +1817,8 @@ function filter() {
 // MAIN
 // ──────────────────────────────────────────────────────────────
 async function mergeSupabaseConfig() {
-  const supaUrl = 'https://mwrkidkvjyrcuexxkhbv.supabase.co';
-  const supaKey = CFG.supabaseServiceKey || CFG.supabaseAnonKey || '';
+  const supaUrl = SUPA_URL;
+  const supaKey = process.env.SUPABASE_SERVICE_KEY || CFG.supabaseServiceKey || CFG.supabaseAnonKey || '';
   if (!supaKey) {
     console.log('   ℹ️  Sin clave Supabase — usando config.json local');
     return;
@@ -1804,10 +1887,29 @@ async function main() {
   console.log(`  Jornada    : desde las ${CFG.horaInicioJornada || '09:00'}`);
   console.log('');
 
-  // 1. CSV
-  console.log('1️⃣  Leyendo CSV…');
-  const clientes = parseCSV(CSV_FILE);
-  console.log(`    → ${clientes.length} clientes cargados`);
+  // 1. Clientes
+  console.log('1️⃣  Cargando clientes…');
+  let clientes;
+  const _supaKeyForClientes = process.env.SUPABASE_SERVICE_KEY || CFG.supabaseServiceKey || CFG.supabaseAnonKey || '';
+  if (_supaKeyForClientes) {
+    try {
+      clientes = await loadClientesFromSupabase();
+      console.log(`    → ${clientes.length} clientes desde Supabase`);
+    } catch(e) {
+      console.log('    ⚠️ Supabase falló, intentando CSV local:', e.message);
+      if (!IS_CLOUD && fs.existsSync(CSV_FILE)) {
+        clientes = parseCSV(CSV_FILE);
+        console.log(`    → ${clientes.length} clientes desde CSV`);
+      } else {
+        throw new Error('No hay clientes disponibles: ' + e.message);
+      }
+    }
+  } else if (!IS_CLOUD && fs.existsSync(CSV_FILE)) {
+    clientes = parseCSV(CSV_FILE);
+    console.log(`    → ${clientes.length} clientes desde CSV local`);
+  } else {
+    throw new Error('No hay clave Supabase ni CSV local. Configura supabaseServiceKey en config.json.');
+  }
 
   // 2. Geocodificación
   console.log('2️⃣  Geocodificando direcciones (Nominatim)…');
@@ -1837,13 +1939,21 @@ async function main() {
   console.log(`    → Media: ${(geo.length / routes.length).toFixed(1)} clientes/día`);
   console.log(`    → Finalización: ${lastDay.toLocaleDateString('es-ES', { weekday:'long', year:'numeric', month:'long', day:'numeric' })}`);
 
-  // 4. Excel
-  console.log('4️⃣  Generando Excel…');
-  generateExcel(schedule);
+  // 4. Excel (solo local)
+  if (!IS_CLOUD) {
+    console.log('4️⃣  Generando Excel…');
+    generateExcel(schedule);
+  } else {
+    console.log('4️⃣  Saltando Excel (cloud)');
+  }
 
-  // 5. HTML
-  console.log('5️⃣  Generando mapa interactivo HTML…');
-  generateHTML(schedule);
+  // 5. HTML (solo local)
+  if (!IS_CLOUD) {
+    console.log('5️⃣  Generando mapa interactivo HTML…');
+    generateHTML(schedule);
+  } else {
+    console.log('5️⃣  Saltando HTML (cloud)');
+  }
 
   // 6. Guardar schedule JSON (para el módulo de notas)
   console.log('6️⃣  Guardando schedule para módulo de notas…');
@@ -1875,17 +1985,19 @@ async function main() {
       }))
     }))
   };
-  fs.writeFileSync(
-    path.join(__dirname, 'planning_schedule.json'),
-    JSON.stringify(scheduleData, null, 2),
-    'utf-8'
-  );
-  console.log('   ✅ planning_schedule.json guardado');
+  if (!IS_CLOUD) {
+    fs.writeFileSync(
+      path.join(__dirname, 'planning_schedule.json'),
+      JSON.stringify(scheduleData, null, 2),
+      'utf-8'
+    );
+    console.log('   ✅ planning_schedule.json guardado');
+  }
 
   // Guardar en Supabase para acceso cloud
   try {
-    const supaUrl = 'https://mwrkidkvjyrcuexxkhbv.supabase.co';
-    const supaKey = CFG.supabaseServiceKey || CFG.supabaseAnonKey || '';
+    const supaUrl = SUPA_URL;
+    const supaKey = process.env.SUPABASE_SERVICE_KEY || CFG.supabaseServiceKey || CFG.supabaseAnonKey || '';
     if (supaKey) {
       console.log('7️⃣  Guardando en Supabase…');
       const headers = {

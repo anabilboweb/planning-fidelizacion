@@ -288,6 +288,27 @@
         </div>
 
         <div class="section">
+          <div class="section-title">📋 Clientes (CSV)</div>
+          <div class="fgroup">
+            <label class="flabel">Importar lista de clientes</label>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+              <input type="file" id="csvFile" accept=".csv"
+                style="flex:1;padding:7px 10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;background:#fff;">
+              <button type="button" onclick="importarCSV()"
+                style="padding:8px 14px;background:#059669;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;">
+                ⬆ Importar
+              </button>
+            </div>
+            <div class="fhint">Columnas requeridas: Nombre, Dirección, Población, Código postal, Provincia</div>
+            <div id="csv-status" style="display:none;margin-top:8px;padding:8px 12px;border-radius:8px;font-size:12px;font-weight:600;"></div>
+          </div>
+          <div class="fgroup">
+            <label class="flabel">Total clientes en Supabase</label>
+            <div id="clientes-count" style="font-size:18px;font-weight:800;color:#1a56db;">—</div>
+          </div>
+        </div>
+
+        <div class="section">
           <div class="section-title">📥 Descargar Planning</div>
           <a href="/api/download/excel" download class="btn-descarga-excel">
             ⬇ Descargar Planning Excel
@@ -310,6 +331,17 @@
           </div>
         </div>
 
+
+        <div class="section">
+          <div class="section-title">🐙 GitHub Actions Token</div>
+          <div class="fgroup">
+            <label class="flabel">Personal Access Token</label>
+            <input type="password" id="githubToken" class="finput"
+                   placeholder="github_pat_...">
+            <div class="fhint">Token con permiso <strong>Actions: write</strong> en el repositorio. Se guarda en Supabase. <a href="https://github.com/settings/tokens?type=beta" target="_blank">Crear token →</a></div>
+          </div>
+        </div>
+
         <button id="btnGuardar" onclick="guardarConfig()">💾 Guardar configuración</button>
         <div id="guardado-ok">✅ Configuración guardada correctamente</div>
 
@@ -322,16 +354,16 @@
     <div class="card regen-card">
       <div class="card-hdr">
         <h2>🔄 Regenerar Planning</h2>
-        <p>Ejecución local desde el ordenador de la oficina</p>
+        <p>Se ejecuta en GitHub Actions — sin abrir nada local</p>
       </div>
       <div class="card-body">
 
-        <div id="srv-status" style="padding:10px 14px;border-radius:8px;background:#f8fafc;border:1.5px solid #e2e8f0;font-size:12px;color:#64748b;margin-bottom:16px;">
-          🔍 Comprobando servidor local…
+        <div id="gh-token-warn" style="display:none;padding:10px 14px;border-radius:8px;background:#fef9c3;border:1.5px solid #fde047;font-size:12px;color:#854d0e;margin-bottom:16px;">
+          ⚠️ Guarda primero el <strong>GitHub Actions Token</strong> en la sección de configuración (izquierda).
         </div>
 
-        <button id="btnRegen" onclick="regenerar()" disabled
-          style="width:100%;padding:14px;background:#1a56db;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;transition:background .15s;display:flex;align-items:center;justify-content:center;gap:8px;opacity:.5;">
+        <button id="btnRegen" onclick="regenerar()"
+          style="width:100%;padding:14px;background:#1a56db;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;transition:background .15s;display:flex;align-items:center;justify-content:center;gap:8px;">
           🔄 Regenerar Planning
         </button>
 
@@ -339,9 +371,9 @@
 
         <div id="regen-output" style="display:none;margin-top:12px;background:#0f172a;color:#94a3b8;border-radius:8px;padding:14px;font-size:11.5px;font-family:'Courier New',monospace;white-space:pre-wrap;word-break:break-all;max-height:340px;overflow-y:auto;line-height:1.55;"></div>
 
-        <div style="margin-top:18px;padding:12px 14px;background:#fef9c3;border:1.5px solid #fde047;border-radius:8px;font-size:12px;color:#854d0e;line-height:1.7;">
-          <strong>Si el botón no está disponible:</strong><br>
-          Ejecuta <code style="background:#fff;padding:1px 6px;border-radius:4px;">arrancar.bat</code> en la carpeta del proyecto y espera a que aparezca el indicador verde.
+        <div style="margin-top:18px;font-size:12px;color:#64748b;line-height:1.7;">
+          El planning se regenera en la nube (~2-5 min) y se actualiza automáticamente en la app al terminar.<br><br>
+          <a id="gh-runs-link" href="https://github.com/anabilboweb/planning-fidelizacion/actions" target="_blank" style="color:#1a56db;font-weight:600;">Ver historial de ejecuciones →</a>
         </div>
 
       </div>
@@ -399,8 +431,7 @@ function mostrarLogin() {
 
 function iniciarApp() {
   cargarConfig();
-  checkServer();
-  srvCheckInterval = setInterval(checkServer, 6000);
+  cargarClientesCount();
 }
 
 async function cargarConfig() {
@@ -435,6 +466,7 @@ async function cargarConfig() {
     if (Array.isArray(filtros.soloCodigosPostales)) document.getElementById('soloCodigosPostales').value = filtros.soloCodigosPostales.join('\n');
 
     if (data.google_api_key) document.getElementById('googleApiKey').value = data.google_api_key;
+    if (data.github_token) document.getElementById('githubToken').value = data.github_token;
   } catch(e) {
     document.getElementById('error-carga').style.display = 'block';
     console.error('Error cargando config:', e);
@@ -466,7 +498,8 @@ async function guardarConfig() {
       soloMunicipios: lineas(document.getElementById('soloMunicipios').value),
       soloCodigosPostales: lineas(document.getElementById('soloCodigosPostales').value)
     },
-    google_api_key: document.getElementById('googleApiKey').value.trim() || null
+    google_api_key: document.getElementById('googleApiKey').value.trim() || null,
+    github_token: document.getElementById('githubToken').value.trim() || null
   };
 
   try {
@@ -506,96 +539,169 @@ async function verificarGoogle() {
   } catch(e) { st.style.color='#dc2626'; st.textContent='❌ Error de red: ' + e.message; }
 }
 
-/* ── Servidor local de regeneración ─────────────────────────── */
-const REGEN_URL = 'http://127.0.0.1:2727';
-let regenPolling = null;
-let srvCheckInterval = null;
+/* ── GitHub Actions — Regenerar Planning ──────────────────────── */
+const GH_REPO = 'anabilboweb/planning-fidelizacion';
+let ghPolling = null;
 
-async function checkServer() {
-  const el = document.getElementById('srv-status');
-  const btn = document.getElementById('btnRegen');
-  if (!el || !btn) return;
-  try {
-    const r = await fetch(REGEN_URL + '/status', { signal: AbortSignal.timeout(1500) });
-    if (r.ok) {
-      const d = await r.json();
-      el.innerHTML = '🟢 <strong>Servidor local activo</strong> — listo para regenerar';
-      el.style.cssText = 'padding:10px 14px;border-radius:8px;background:#d1fae5;border:1.5px solid #6ee7b7;font-size:12px;color:#065f46;margin-bottom:16px;';
-      btn.disabled = d.running;
-      btn.style.opacity = d.running ? '.5' : '1';
-      btn.style.cursor = d.running ? 'not-allowed' : 'pointer';
-      if (d.running && !regenPolling) startPolling();
-      return;
-    }
-  } catch (e) { /* servidor no disponible */ }
-  el.innerHTML = '🔴 <strong>Servidor local no disponible</strong><br><small>Ejecuta arrancar.bat para habilitarlo</small>';
-  el.style.cssText = 'padding:10px 14px;border-radius:8px;background:#fee2e2;border:1.5px solid #fca5a5;font-size:12px;color:#991b1b;margin-bottom:16px;';
-  btn.disabled = true;
-  btn.style.opacity = '.5';
-  btn.style.cursor = 'not-allowed';
+function getGithubToken() {
+  return document.getElementById('githubToken').value.trim();
 }
 
 async function regenerar() {
+  const token = getGithubToken();
   const btn = document.getElementById('btnRegen');
   const st  = document.getElementById('regen-status');
   const out = document.getElementById('regen-output');
+  const warn = document.getElementById('gh-token-warn');
+
+  if (!token) {
+    warn.style.display = 'block';
+    return;
+  }
+  warn.style.display = 'none';
+
   btn.disabled = true;
-  btn.style.opacity = '.5';
+  btn.style.opacity = '.6';
   st.style.display = 'block';
   st.style.cssText = 'display:block;margin-top:14px;font-size:13px;font-weight:600;padding:10px 14px;border-radius:8px;background:#eff6ff;border:1.5px solid #bfdbfe;color:#1e40af;';
-  st.textContent = '⏳ Iniciando regeneración…';
+  st.textContent = '⏳ Disparando GitHub Actions…';
   out.style.display = 'none';
-  out.textContent = '';
+
   try {
-    const r = await fetch(REGEN_URL + '/regenerar', { method: 'POST' });
-    const d = await r.json();
-    if (!d.ok) {
+    const r = await fetch(`https://api.github.com/repos/${GH_REPO}/dispatches`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/vnd.github.v3+json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ event_type: 'regenerar-planning' })
+    });
+
+    if (r.status === 204) {
+      st.textContent = '⚙️ Planning generándose en GitHub… (2-5 min)';
+      await new Promise(r => setTimeout(r, 4000)); // dar tiempo a que aparezca el run
+      startPollingGH(token);
+    } else {
+      const txt = await r.text();
       st.style.cssText = 'display:block;margin-top:14px;font-size:13px;font-weight:600;padding:10px 14px;border-radius:8px;background:#fee2e2;border:1.5px solid #fca5a5;color:#991b1b;';
-      st.textContent = '⚠️ ' + d.msg;
-      btn.disabled = false;
-      btn.style.opacity = '1';
-      return;
+      st.textContent = `❌ Error ${r.status}: ${txt}`;
+      btn.disabled = false; btn.style.opacity = '1';
     }
-    st.textContent = '⚙️ Generando planning… (puede tardar 1-3 min)';
-    startPolling();
-  } catch (e) {
+  } catch(e) {
     st.style.cssText = 'display:block;margin-top:14px;font-size:13px;font-weight:600;padding:10px 14px;border-radius:8px;background:#fee2e2;border:1.5px solid #fca5a5;color:#991b1b;';
-    st.textContent = '❌ Error: servidor no disponible. ¿Está arrancar.bat activo?';
-    btn.disabled = false;
-    btn.style.opacity = '1';
+    st.textContent = '❌ Error de red: ' + e.message;
+    btn.disabled = false; btn.style.opacity = '1';
   }
 }
 
-function startPolling() {
-  if (regenPolling) return;
-  regenPolling = setInterval(async () => {
+function startPollingGH(token) {
+  if (ghPolling) clearInterval(ghPolling);
+  ghPolling = setInterval(async () => {
     try {
-      const r = await fetch(REGEN_URL + '/status');
+      const r = await fetch(
+        `https://api.github.com/repos/${GH_REPO}/actions/runs?event=repository_dispatch&per_page=1`,
+        { headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github.v3+json' } }
+      );
       const d = await r.json();
-      const out = document.getElementById('regen-output');
+      const run = d.workflow_runs?.[0];
+      if (!run) return;
+
       const st  = document.getElementById('regen-status');
+      const out = document.getElementById('regen-output');
       const btn = document.getElementById('btnRegen');
-      if (d.log) {
-        out.style.display = 'block';
-        out.textContent = d.log;
-        out.scrollTop = out.scrollHeight;
-      }
-      if (!d.running) {
-        clearInterval(regenPolling);
-        regenPolling = null;
-        btn.disabled = false;
-        btn.style.opacity = '1';
-        if (d.status === 'done') {
+
+      const emoji = { queued:'⏳', in_progress:'⚙️', completed:'✅' }[run.status] || '⏳';
+      const label = run.status === 'completed'
+        ? (run.conclusion === 'success' ? '✅ Planning regenerado correctamente' : `❌ Error (${run.conclusion})`)
+        : `${emoji} ${run.status === 'in_progress' ? 'Ejecutando en GitHub…' : 'En cola…'}`;
+
+      st.textContent = label;
+      out.style.display = 'block';
+      out.textContent = `Workflow: ${run.name}\nEstado:   ${run.status}${run.conclusion ? ' → ' + run.conclusion : ''}\nInicio:   ${new Date(run.created_at).toLocaleTimeString('es-ES')}\nVer log:  ${run.html_url}`;
+
+      if (run.status === 'completed') {
+        clearInterval(ghPolling); ghPolling = null;
+        btn.disabled = false; btn.style.opacity = '1';
+        if (run.conclusion === 'success') {
           st.style.cssText = 'display:block;margin-top:14px;font-size:13px;font-weight:600;padding:10px 14px;border-radius:8px;background:#d1fae5;border:1.5px solid #6ee7b7;color:#065f46;';
-          st.textContent = '✅ Planning actualizado correctamente';
-          toast('✅ Planning regenerado — recarga la página de Planning para verlo');
+          toast('✅ Planning regenerado — recarga Planning para verlo');
         } else {
           st.style.cssText = 'display:block;margin-top:14px;font-size:13px;font-weight:600;padding:10px 14px;border-radius:8px;background:#fee2e2;border:1.5px solid #fca5a5;color:#991b1b;';
-          st.textContent = '❌ Error al generar el planning (revisa el log de abajo)';
         }
       }
-    } catch (e) { clearInterval(regenPolling); regenPolling = null; }
-  }, 2000);
+    } catch(e) { /* silencioso */ }
+  }, 6000);
+}
+
+async function cargarClientesCount() {
+  try {
+    const { count } = await sb.from('clientes').select('*', { count: 'exact', head: true }).eq('activo', true);
+    const el = document.getElementById('clientes-count');
+    if (el) el.textContent = count ?? '—';
+  } catch(e) {}
+}
+
+async function importarCSV() {
+  const input = document.getElementById('csvFile');
+  const statusEl = document.getElementById('csv-status');
+  if (!input.files.length) { toast('Selecciona un fichero CSV primero'); return; }
+
+  statusEl.style.cssText = 'display:block;margin-top:8px;padding:8px 12px;border-radius:8px;font-size:12px;font-weight:600;background:#eff6ff;border:1.5px solid #bfdbfe;color:#1e40af;';
+  statusEl.textContent = '⏳ Procesando CSV…';
+
+  try {
+    const text = await input.files[0].text();
+    const lines = text.split(/\r?\n/).filter(l => l.trim());
+    if (lines.length < 2) throw new Error('El CSV está vacío o no tiene datos');
+
+    const headers = parseCsvLine(lines[0]);
+    const rows = lines.slice(1).map(l => {
+      const f = parseCsvLine(l);
+      const o = {};
+      headers.forEach((h, i) => { o[h.trim()] = (f[i] || '').trim(); });
+      return o;
+    }).filter(r => r['Nombre']);
+
+    statusEl.textContent = `⏳ Generando IDs y subiendo ${rows.length} clientes…`;
+
+    const registros = await Promise.all(rows.map(async r => {
+      const cp = (r['Código postal'] || '').replace('.0', '');
+      const seed = `${r['Nombre']}|${cp}`;
+      const buf = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(seed));
+      const hex = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('').slice(0,16);
+      return { id: hex, nombre: r['Nombre'], direccion: r['Dirección'] || r['Direccion'] || '', poblacion: r['Población'] || r['Poblacion'] || '', cp, provincia: r['Provincia'] || '', activo: true };
+    }));
+
+    // Upsert en lotes de 200
+    const LOTE = 200;
+    for (let i = 0; i < registros.length; i += LOTE) {
+      const lote = registros.slice(i, i + LOTE);
+      const { error } = await sb.from('clientes').upsert(lote, { onConflict: 'id' });
+      if (error) throw new Error(error.message);
+    }
+
+    statusEl.style.cssText = 'display:block;margin-top:8px;padding:8px 12px;border-radius:8px;font-size:12px;font-weight:600;background:#d1fae5;border:1.5px solid #6ee7b7;color:#065f46;';
+    statusEl.textContent = `✅ ${registros.length} clientes importados correctamente`;
+    input.value = '';
+    cargarClientesCount();
+    toast(`✅ ${registros.length} clientes importados`);
+  } catch(e) {
+    statusEl.style.cssText = 'display:block;margin-top:8px;padding:8px 12px;border-radius:8px;font-size:12px;font-weight:600;background:#fee2e2;border:1.5px solid #fca5a5;color:#991b1b;';
+    statusEl.textContent = '❌ Error: ' + e.message;
+  }
+}
+
+function parseCsvLine(line) {
+  const fields = [];
+  let cur = '', inQ = false;
+  for (const ch of line) {
+    if (ch === '"') { inQ = !inQ; }
+    else if (ch === ',' && !inQ) { fields.push(cur); cur = ''; }
+    else cur += ch;
+  }
+  fields.push(cur);
+  return fields;
 }
 
 (async () => {
