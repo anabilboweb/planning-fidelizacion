@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
   <title>Planning Visitas BilboWeb</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
@@ -144,7 +145,10 @@
   <a href="/" class="active">🗓 Planning</a>
   <a href="/notas">📝 Notas</a>
   <a href="/config">⚙️ Config</a>
-  <button onclick="logoutUser()" style="margin-left:auto;background:transparent;border:1px solid rgba(255,255,255,.3);color:rgba(255,255,255,.7);padding:4px 12px;border-radius:6px;font-size:11px;cursor:pointer;font-weight:600;">
+  <button onclick="downloadExcel()" style="margin-left:auto;background:#059669;border:none;color:#fff;padding:4px 14px;border-radius:6px;font-size:11px;cursor:pointer;font-weight:600;">
+    ⬇ Excel
+  </button>
+  <button onclick="logoutUser()" style="margin-left:8px;background:transparent;border:1px solid rgba(255,255,255,.3);color:rgba(255,255,255,.7);padding:4px 12px;border-radius:6px;font-size:11px;cursor:pointer;font-weight:600;">
     Salir
   </button>
 </nav>
@@ -490,6 +494,62 @@ function filter() {
     if (!nr) { nr = document.createElement('div'); nr.id = 'nores'; nr.className = 'nores'; document.getElementById('cal').appendChild(nr); }
     nr.textContent = 'Sin resultados para "' + q + '"';
   } else if (nr) nr.remove();
+}
+
+function downloadExcel() {
+  if (!DATA.length) { alert('No hay planning cargado.'); return; }
+
+  const wb = XLSX.utils.book_new();
+
+  // Agrupar por semana
+  const weeks = new Map();
+  DATA.forEach(day => {
+    const dt = new Date(day.date);
+    const j  = new Date(dt.getFullYear(), 0, 1);
+    const w  = Math.ceil(((dt - j) / 86400000 + j.getDay() + 1) / 7);
+    const wKey = `${dt.getFullYear()}-S${String(w).padStart(2,'0')}`;
+    if (!weeks.has(wKey)) weeks.set(wKey, []);
+    weeks.get(wKey).push(day);
+  });
+
+  for (const [wKey, days] of weeks) {
+    const rows = [['Día','Fecha','Nº','Empresa','Dirección','Municipio','CP','Llegada','Salida','Viaje sig. (min)','Total día']];
+    for (const day of days) {
+      const dt       = new Date(day.date);
+      const dayLabel = dt.toLocaleDateString('es-ES', { weekday: 'long' });
+      const dateStr  = dt.toLocaleDateString('es-ES');
+      const totalH   = (day.totalMin / 60).toFixed(1) + ' h';
+      day.clients.forEach((c, i) => {
+        const nextMin   = i < day.clients.length - 1 ? day.clients[i+1].travel : day.retBase;
+        const nextLabel = i < day.clients.length - 1 ? String(nextMin) : `↩ ${nextMin} (base)`;
+        rows.push([
+          i === 0 ? dayLabel : '', i === 0 ? dateStr : '',
+          i + 1, c.nombre, c.direccion, c.poblacion, c.cp,
+          c.llegada, c.salida, nextLabel, i === 0 ? totalH : ''
+        ]);
+      });
+      rows.push(new Array(11).fill(''));
+    }
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = [{wch:12},{wch:11},{wch:4},{wch:42},{wch:42},{wch:24},{wch:7},{wch:11},{wch:11},{wch:18},{wch:10}];
+    XLSX.utils.book_append_sheet(wb, ws, wKey);
+  }
+
+  // Hoja RESUMEN
+  const sumRows = [['Semana','Días','Visitas','Clientes/día','Primera fecha','Última fecha']];
+  for (const [wKey, days] of weeks) {
+    const vis = days.reduce((s, d) => s + d.clients.length, 0);
+    sumRows.push([
+      wKey, days.length, vis, (vis / days.length).toFixed(1),
+      new Date(days[0].date).toLocaleDateString('es-ES'),
+      new Date(days[days.length-1].date).toLocaleDateString('es-ES')
+    ]);
+  }
+  const wsSum = XLSX.utils.aoa_to_sheet(sumRows);
+  wsSum['!cols'] = [{wch:12},{wch:8},{wch:9},{wch:13},{wch:14},{wch:14}];
+  XLSX.utils.book_append_sheet(wb, wsSum, 'RESUMEN');
+
+  XLSX.writeFile(wb, 'planning_visitas.xlsx');
 }
 
 (async () => {
