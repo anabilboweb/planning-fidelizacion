@@ -3,6 +3,7 @@
   "rewrites": [
     { "source": "/notas", "destination": "/notas.html" },
     { "source": "/config", "destination": "/config.html" },
+    { "source": "/dashboard", "destination": "/dashboard.html" },
     { "source": "/", "destination": "/index.html" }
   ]
 }

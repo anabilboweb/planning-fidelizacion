@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>BilboWeb · Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:'Segoe UI',Arial,sans-serif;display:flex;flex-direction:column;
+         height:100vh;overflow:hidden;background:#f1f5f9;}
+
+    /* Nav */
+    #nav{display:flex;align-items:center;background:#1e293b;height:36px;flex-shrink:0;padding:0 16px;}
+    #nav a{color:rgba(255,255,255,.65);text-decoration:none;font-size:12px;font-weight:600;
+           padding:0 14px;height:36px;display:flex;align-items:center;
+           border-bottom:2px solid transparent;transition:all .15s;}
+    #nav a:hover{color:#fff;}
+    #nav a.active{color:#fff;border-bottom-color:#1a56db;}
+    #nav .nav-right{margin-left:auto;}
+
+    /* Main content */
+    #content{flex:1;display:flex;flex-direction:column;overflow:hidden;padding:10px 14px 10px;gap:10px;}
+
+    /* KPIs */
+    #kpis{display:flex;gap:10px;flex-shrink:0;}
+    .kpi{flex:1;background:#fff;border:1px solid #e2e8f0;border-radius:12px;
+         padding:12px 16px;box-shadow:0 1px 4px rgba(0,0,0,.06);}
+    .kpi .num{font-size:32px;font-weight:800;color:#1a56db;line-height:1;}
+    .kpi .lbl{font-size:11px;color:#64748b;margin-top:5px;}
+
+    /* Agenda */
+    #agenda-zona{flex-shrink:0;background:#fff;border:1px solid #e2e8f0;border-radius:12px;
+                 box-shadow:0 1px 4px rgba(0,0,0,.06);overflow:hidden;max-height:220px;display:flex;flex-direction:column;}
+    #agenda-hdr{display:flex;align-items:center;gap:0;padding:8px 14px;border-bottom:1px solid #e2e8f0;flex-shrink:0;}
+    .agenda-nav{background:none;border:1px solid #e2e8f0;border-radius:6px;padding:3px 10px;
+                cursor:pointer;font-size:13px;color:#475569;transition:all .15s;}
+    .agenda-nav:hover{background:#f1f5f9;}
+    #agenda-title{flex:1;text-align:center;font-size:14px;font-weight:700;color:#1e293b;}
+    #agenda-list{overflow-y:auto;flex:1;}
+    .ag-row{display:flex;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid #f1f5f9;}
+    .ag-row:last-child{border-bottom:none;}
+    .ag-hora{font-size:13px;font-weight:700;color:#0ea5e9;min-width:46px;}
+    .ag-nombre{font-size:13px;font-weight:700;color:#1e293b;flex:1;}
+    .ag-pob{font-size:12px;color:#94a3b8;min-width:90px;}
+    .ag-badge{font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;white-space:nowrap;}
+    .badge-pendiente{color:#64748b;background:#f1f5f9;}
+    .badge-pospuesta{color:#92400e;background:#fef3c7;}
+    .badge-realizada{color:#065f46;background:#d1fae5;}
+    .badge-no-interesado{color:#991b1b;background:#fee2e2;}
+    .ag-link{font-size:13px;text-decoration:none;padding:2px 6px;border-radius:6px;
+             background:#eff6ff;color:#1a56db;border:1px solid #bfdbfe;transition:all .15s;}
+    .ag-link:hover{background:#1a56db;color:#fff;}
+    .ag-empty{text-align:center;color:#94a3b8;font-size:13px;padding:20px;}
+
+    /* Bottom row */
+    #bottom{flex:1;display:flex;gap:10px;overflow:hidden;min-height:0;}
+
+    /* Left col: donut + barras */
+    #left-col{display:flex;flex-direction:column;gap:10px;width:52%;min-width:0;}
+    .chart-card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;
+                box-shadow:0 1px 4px rgba(0,0,0,.06);padding:12px 14px;overflow:hidden;}
+    .chart-card h3{font-size:12px;font-weight:700;color:#475569;text-transform:uppercase;
+                   letter-spacing:.4px;margin-bottom:8px;}
+    #donut-wrap{display:flex;align-items:center;gap:16px;min-height:0;}
+    #donut-canvas-wrap{flex-shrink:0;width:140px;height:140px;position:relative;}
+    #donut-legend{display:flex;flex-direction:column;gap:5px;flex:1;}
+    .legend-item{display:flex;align-items:center;gap:6px;font-size:12px;color:#475569;}
+    .legend-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+    .legend-pct{margin-left:auto;font-weight:700;color:#1e293b;font-size:11px;}
+    #barras-card{flex:1;min-height:0;display:flex;flex-direction:column;}
+    #barras-canvas-wrap{flex:1;min-height:0;position:relative;}
+
+    /* Right col: seguimientos */
+    #seg-card{flex:1;background:#fff;border:1px solid #e2e8f0;border-radius:12px;
+              box-shadow:0 1px 4px rgba(0,0,0,.06);padding:12px 14px;
+              display:flex;flex-direction:column;overflow:hidden;}
+    #seg-card h3{font-size:12px;font-weight:700;color:#475569;text-transform:uppercase;
+                 letter-spacing:.4px;margin-bottom:8px;flex-shrink:0;}
+    #seg-table-wrap{flex:1;overflow-y:auto;}
+    #seg-table{width:100%;border-collapse:collapse;font-size:12px;}
+    #seg-table th{background:#f8fafc;color:#475569;font-size:10px;font-weight:700;
+                  text-transform:uppercase;letter-spacing:.3px;padding:5px 8px;
+                  border-bottom:1px solid #e2e8f0;text-align:left;position:sticky;top:0;}
+    #seg-table td{padding:5px 8px;border-bottom:1px solid #f1f5f9;vertical-align:middle;}
+    #seg-table tr:last-child td{border-bottom:none;}
+    .seg-dias{font-size:11px;color:#64748b;}
+    .seg-empty{text-align:center;color:#94a3b8;font-size:13px;padding:20px;}
+
+    /* Loading */
+    #loading{position:fixed;inset:0;background:rgba(241,245,249,.85);display:flex;
+             align-items:center;justify-content:center;z-index:9000;font-size:14px;color:#475569;}
+  </style>
+</head>
+<body>
+
+<!-- Reset password overlay -->
+<div id="reset-overlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.85);z-index:99999;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:16px;padding:36px 40px;width:340px;box-shadow:0 20px 60px rgba(0,0,0,.3);">
+    <div style="text-align:center;margin-bottom:24px;">
+      <div style="font-size:32px;margin-bottom:8px;">🔑</div>
+      <h2 style="font-size:20px;font-weight:800;color:#1e293b;margin:0">Nueva contraseña</h2>
+    </div>
+    <div style="margin-bottom:14px;">
+      <label style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px">Nueva contraseña</label>
+      <input id="reset-pass" type="password" placeholder="••••••••"
+        style="width:100%;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:14px;outline:none;box-sizing:border-box;"
+        onkeydown="if(event.key==='Enter')guardarNuevaPass()">
+    </div>
+    <div id="reset-error" style="display:none;background:#fee2e2;border:1px solid #fca5a5;color:#991b1b;padding:8px 12px;border-radius:8px;font-size:13px;margin-bottom:14px;"></div>
+    <button onclick="guardarNuevaPass()" style="width:100%;padding:12px;background:#1a56db;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer;">Guardar contraseña</button>
+  </div>
+</div>
+
+<!-- Login overlay -->
+<div id="login-overlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.85);z-index:99999;align-items:center;justify-content:center;flex-direction:column;">
+  <div style="background:#fff;border-radius:16px;padding:36px 40px;width:340px;box-shadow:0 20px 60px rgba(0,0,0,.3);">
+    <div style="text-align:center;margin-bottom:24px;">
+      <div style="font-size:32px;margin-bottom:8px;">🗓</div>
+      <h2 style="font-size:20px;font-weight:800;color:#1e293b;margin:0">BilboWeb Planning</h2>
+      <p style="font-size:13px;color:#64748b;margin:6px 0 0">Acceso restringido</p>
+    </div>
+    <div style="margin-bottom:14px;">
+      <label style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px">Email</label>
+      <input id="login-email" type="email" placeholder="tu@email.com"
+        style="width:100%;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:14px;outline:none;box-sizing:border-box;"
+        onkeydown="if(event.key==='Enter')document.getElementById('login-pass').focus()">
+    </div>
+    <div style="margin-bottom:20px;">
+      <label style="font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px">Contraseña</label>
+      <input id="login-pass" type="password" placeholder="••••••••"
+        style="width:100%;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:14px;outline:none;box-sizing:border-box;"
+        onkeydown="if(event.key==='Enter')loginUser()">
+    </div>
+    <div id="login-error" style="display:none;background:#fee2e2;border:1px solid #fca5a5;color:#991b1b;padding:8px 12px;border-radius:8px;font-size:13px;margin-bottom:14px;"></div>
+    <button id="login-btn" onclick="loginUser()"
+      style="width:100%;padding:12px;background:#1a56db;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer;">
+      Entrar
+    </button>
+  </div>
+</div>
+
+<div id="loading">Cargando dashboard…</div>
+
+<nav id="nav">
+  <a href="/">🗓 Planning</a>
+  <a href="/notas">📝 Notas</a>
+  <a href="/dashboard" class="active">📊 Dashboard</a>
+  <a href="/config">⚙️ Config</a>
+  <div class="nav-right">
+    <button onclick="logoutUser()" style="background:transparent;border:1px solid rgba(255,255,255,.3);color:rgba(255,255,255,.7);padding:4px 12px;border-radius:6px;font-size:11px;cursor:pointer;font-weight:600;">
+      Salir
+    </button>
+  </div>
+</nav>
+
+<div id="content">
+  <!-- ZONA 1: KPIs -->
+  <div id="kpis">
+    <div class="kpi"><div class="num" id="kpi-ruta">—</div><div class="lbl">Clientes en ruta</div></div>
+    <div class="kpi"><div class="num" id="kpi-semana">—</div><div class="lbl">Visitas esta semana</div></div>
+    <div class="kpi"><div class="num" id="kpi-hoy">—</div><div class="lbl">Pendientes hoy</div></div>
+    <div class="kpi"><div class="num" id="kpi-tasa">—</div><div class="lbl">Tasa de éxito</div></div>
+  </div>
+
+  <!-- ZONA 4: Agenda del día -->
+  <div id="agenda-zona">
+    <div id="agenda-hdr">
+      <button class="agenda-nav" id="btn-prev" onclick="agendaNav(-1)">← Anterior</button>
+      <div id="agenda-title">—</div>
+      <button class="agenda-nav" id="btn-next" onclick="agendaNav(+1)">Siguiente →</button>
+    </div>
+    <div id="agenda-list"></div>
+  </div>
+
+  <!-- Bottom -->
+  <div id="bottom">
+    <div id="left-col">
+      <!-- ZONA 2a: Donut -->
+      <div class="chart-card" style="flex-shrink:0;">
+        <h3>Estados — Planning actual</h3>
+        <div id="donut-wrap">
+          <div id="donut-canvas-wrap"><canvas id="donut-canvas"></canvas></div>
+          <div id="donut-legend"></div>
+        </div>
+      </div>
+      <!-- ZONA 2b: Barras semanales -->
+      <div class="chart-card barras-card" style="flex:1;min-height:0;display:flex;flex-direction:column;">
+        <h3>Visitas por semana (últimas 6)</h3>
+        <div style="flex:1;min-height:0;position:relative;">
+          <canvas id="barras-canvas"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- ZONA 3: Seguimientos -->
+    <div id="seg-card">
+      <h3>Próximos seguimientos</h3>
+      <div id="seg-table-wrap">
+        <table id="seg-table">
+          <thead>
+            <tr>
+              <th>Empresa</th>
+              <th>Estado</th>
+              <th>Seguimiento</th>
+              <th>Días</th>
+            </tr>
+          </thead>
+          <tbody id="seg-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+Chart.register(...Chart.registerables);
+
+const { createClient } = supabase;
+const sb = createClient(
+  'https://mwrkidkvjyrcuexxkhbv.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im13cmtpZGt2anlyY3VleHhraGJ2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3MTIzNDQsImV4cCI6MjA5NTI4ODM0NH0.i0WJYs8buXxL6UQEcChvj5Q5p3gN02_SjMGtXtndS2s'
+);
+
+/* ── Auth ── */
+async function checkAuth() {
+  const hash = window.location.hash;
+  if (hash.includes('type=recovery')) {
+    document.getElementById('reset-overlay').style.display = 'flex';
+    return false;
+  }
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { mostrarLogin(); return false; }
+  return true;
+}
+
+async function guardarNuevaPass() {
+  const pass  = document.getElementById('reset-pass').value;
+  const errEl = document.getElementById('reset-error');
+  errEl.style.display = 'none';
+  if (pass.length < 6) {
+    errEl.textContent = 'La contraseña debe tener al menos 6 caracteres';
+    errEl.style.display = 'block';
+    return;
+  }
+  const { error } = await sb.auth.updateUser({ password: pass });
+  if (error) {
+    errEl.textContent = '❌ Error: ' + error.message;
+    errEl.style.display = 'block';
+  } else {
+    document.getElementById('reset-overlay').style.display = 'none';
+    window.location.hash = '';
+    iniciarApp();
+  }
+}
+
+async function loginUser() {
+  const email = document.getElementById('login-email').value.trim();
+  const pass  = document.getElementById('login-pass').value;
+  const errEl = document.getElementById('login-error');
+  const btn   = document.getElementById('login-btn');
+  errEl.style.display = 'none';
+  btn.disabled = true;
+  btn.textContent = 'Accediendo...';
+  const { error } = await sb.auth.signInWithPassword({ email, password: pass });
+  if (error) {
+    errEl.textContent = '❌ Email o contraseña incorrectos';
+    errEl.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = 'Entrar';
+  } else {
+    document.getElementById('login-overlay').style.display = 'none';
+    iniciarApp();
+  }
+}
+
+async function logoutUser() {
+  await sb.auth.signOut();
+  location.reload();
+}
+
+function mostrarLogin() {
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('login-overlay').style.display = 'flex';
+}
+
+function iniciarApp() {
+  cargarDatos();
+}
+
+/* ── Utilidades ── */
+function isoWeek(date) {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + 3 - (d.getDay() + 6) % 7);
+  const week1 = new Date(d.getFullYear(), 0, 4);
+  return [d.getFullYear(), 1 + Math.round(((d - week1) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7)];
+}
+
+function lunes(date) {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  const day = d.getDay();
+  const diff = (day === 0 ? -6 : 1 - day);
+  d.setDate(d.getDate() + diff);
+  return d;
+}
+
+function domingo(date) {
+  const l = lunes(date);
+  l.setDate(l.getDate() + 6);
+  return l;
+}
+
+function fechaISO(d) {
+  return d.toISOString().slice(0, 10);
+}
+
+const ESTADO_COLORES = {
+  pendiente:       '#94a3b8',
+  pospuesta:       '#f59e0b',
+  realizada:       '#10b981',
+  'no-interesado': '#ef4444'
+};
+
+const ESTADO_LABEL = {
+  pendiente:       'Pendiente',
+  pospuesta:       'Pospuesta',
+  realizada:       'Realizada',
+  'no-interesado': 'No interesado'
+};
+
+/* ── Estado global ── */
+let DIAS = [];
+let NOTAS_MAP = new Map();
+let agendaIdx = 0;
+let donutChart = null;
+let barrasChart = null;
+
+/* ── Carga principal ── */
+async function cargarDatos() {
+  const { data: rows } = await sb.from('planning_schedule').select('schedule').order('id', { ascending: false }).limit(1);
+  const schedule = rows?.[0]?.schedule || {};
+  DIAS = schedule.dias || [];
+
+  const { data: notasArr } = await sb.from('notas').select('*');
+  NOTAS_MAP = new Map((notasArr || []).map(n => [n.id, n]));
+
+  const clienteMap = new Map();
+  DIAS.forEach(d => (d.clientes || []).forEach(c => clienteMap.set(c.id, c)));
+
+  document.getElementById('loading').style.display = 'none';
+
+  renderKPIs(notasArr || []);
+  agendaIdx = hoyIndex();
+  renderAgenda();
+  renderDonut();
+  renderBarras(notasArr || []);
+  renderSeguimientos(notasArr || [], clienteMap);
+}
+
+/* ── KPIs ── */
+function renderKPIs(notasArr) {
+  const totalClientes = DIAS.flatMap(d => d.clientes || []).length;
+  document.getElementById('kpi-ruta').textContent = totalClientes;
+
+  const hoy = new Date();
+  const semLunes = lunes(hoy);
+  const semDomingo = domingo(hoy);
+  const visitasSemana = notasArr.filter(n => {
+    if (n.estado !== 'realizada' || !n.fecha_visita) return false;
+    const fv = new Date(n.fecha_visita);
+    return fv >= semLunes && fv <= semDomingo;
+  }).length;
+  document.getElementById('kpi-semana').textContent = visitasSemana;
+
+  const hoyStr = fechaISO(hoy);
+  const diaHoy = DIAS.find(d => d.fecha && d.fecha.slice(0, 10) === hoyStr);
+  const pendientesHoy = diaHoy
+    ? (diaHoy.clientes || []).filter(c => {
+        const estado = NOTAS_MAP.get(c.id)?.estado || c.estado || 'pendiente';
+        return estado === 'pendiente';
+      }).length
+    : 0;
+  document.getElementById('kpi-hoy').textContent = pendientesHoy;
+
+  const realizadas   = notasArr.filter(n => n.estado === 'realizada').length;
+  const noInteresado = notasArr.filter(n => n.estado === 'no-interesado').length;
+  const base = realizadas + noInteresado;
+  const tasa = base === 0
+    ? '—'
+    : Math.round((realizadas / base) * 100) + '%';
+  document.getElementById('kpi-tasa').textContent = tasa;
+}
+
+/* ── Agenda ── */
+function hoyIndex() {
+  const hoyStr = fechaISO(new Date());
+  let idx = DIAS.findIndex(d => d.fecha && d.fecha.slice(0, 10) === hoyStr);
+  if (idx !== -1) return idx;
+  if (!DIAS.length) return 0;
+  const hoyMs = new Date(hoyStr).getTime();
+  let best = 0, bestDiff = Infinity;
+  DIAS.forEach((d, i) => {
+    if (!d.fecha) return;
+    const diff = new Date(d.fecha.slice(0, 10)).getTime() - hoyMs;
+    const abs = Math.abs(diff);
+    if (diff > 0 && abs < bestDiff) { best = i; bestDiff = abs; }
+  });
+  if (bestDiff === Infinity) {
+    DIAS.forEach((d, i) => {
+      if (!d.fecha) return;
+      const abs = Math.abs(new Date(d.fecha.slice(0, 10)).getTime() - hoyMs);
+      if (abs < bestDiff) { best = i; bestDiff = abs; }
+    });
+  }
+  return best;
+}
+
+function agendaNav(delta) {
+  const newIdx = agendaIdx + delta;
+  if (newIdx < 0 || newIdx >= DIAS.length) return;
+  agendaIdx = newIdx;
+  renderAgenda();
+}
+
+function renderAgenda() {
+  const list = document.getElementById('agenda-list');
+  const title = document.getElementById('agenda-title');
+
+  if (!DIAS.length) {
+    title.textContent = 'Sin planning cargado';
+    list.innerHTML = '<div class="ag-empty">Sin visitas planificadas para este día</div>';
+    return;
+  }
+
+  document.getElementById('btn-prev').disabled = agendaIdx === 0;
+  document.getElementById('btn-next').disabled = agendaIdx === DIAS.length - 1;
+
+  const dia = DIAS[agendaIdx];
+  const fecha = dia.fecha ? new Date(dia.fecha) : null;
+  if (fecha) {
+    const label = fecha.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    title.textContent = label.charAt(0).toUpperCase() + label.slice(1);
+  } else {
+    title.textContent = dia.label || '—';
+  }
+
+  const clientes = dia.clientes || [];
+  if (!clientes.length) {
+    list.innerHTML = '<div class="ag-empty">Sin visitas planificadas para este día</div>';
+    return;
+  }
+
+  list.innerHTML = clientes.map(c => {
+    const estado = NOTAS_MAP.get(c.id)?.estado || c.estado || 'pendiente';
+    const badgeClass = 'ag-badge badge-' + estado.replace('-', '-');
+    const link = c.id ? `<a class="ag-link" href="/notas?id=${c.id}" target="_blank">📝</a>` : '';
+    return `<div class="ag-row">
+      <div class="ag-hora">${c.llegada || '—'}</div>
+      <div class="ag-nombre">${c.nombre || '—'}</div>
+      <div class="ag-pob">${c.poblacion || ''}</div>
+      <div class="${badgeClass}">${ESTADO_LABEL[estado] || estado}</div>
+      ${link}
+    </div>`;
+  }).join('');
+}
+
+/* ── Donut ── */
+function renderDonut() {
+  const conteo = { pendiente: 0, pospuesta: 0, realizada: 0, 'no-interesado': 0 };
+  DIAS.forEach(d => (d.clientes || []).forEach(c => {
+    const estado = NOTAS_MAP.get(c.id)?.estado || c.estado || 'pendiente';
+    if (conteo[estado] !== undefined) conteo[estado]++;
+    else conteo.pendiente++;
+  }));
+
+  const total = Object.values(conteo).reduce((a, b) => a + b, 0);
+  const labels = Object.keys(conteo);
+  const data   = labels.map(k => conteo[k]);
+  const colors = labels.map(k => ESTADO_COLORES[k]);
+
+  if (donutChart) donutChart.destroy();
+  const ctx = document.getElementById('donut-canvas').getContext('2d');
+  donutChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 2, borderColor: '#fff' }] },
+    options: {
+      cutout: '68%',
+      plugins: { legend: { display: false }, tooltip: { enabled: true } },
+      responsive: true,
+      maintainAspectRatio: true
+    }
+  });
+
+  const legend = document.getElementById('donut-legend');
+  legend.innerHTML = labels.map((k, i) => {
+    const pct = total > 0 ? Math.round((conteo[k] / total) * 100) : 0;
+    return `<div class="legend-item">
+      <div class="legend-dot" style="background:${colors[i]}"></div>
+      <span>${ESTADO_LABEL[k]}</span>
+      <span style="color:#94a3b8;font-size:11px;margin-left:3px">(${conteo[k]})</span>
+      <span class="legend-pct">${pct}%</span>
+    </div>`;
+  }).join('');
+}
+
+/* ── Barras semanales ── */
+function renderBarras(notasArr) {
+  const hoy = new Date();
+  const semanas = [];
+  for (let i = 5; i >= 0; i--) {
+    const ref = new Date(hoy);
+    ref.setDate(ref.getDate() - i * 7);
+    const [yr, wk] = isoWeek(ref);
+    semanas.push({ yr, wk, label: `S${String(wk).padStart(2, '0')} ${yr}`, lunes: lunes(ref), domingo: domingo(ref) });
+  }
+
+  const estados = ['pendiente', 'pospuesta', 'realizada', 'no-interesado'];
+  const datasets = estados.map(estado => ({
+    label: ESTADO_LABEL[estado],
+    data: semanas.map(s =>
+      notasArr.filter(n => {
+        if ((n.estado || 'pendiente') !== estado) return false;
+        if (!n.fecha_visita) return false;
+        const fv = new Date(n.fecha_visita);
+        return fv >= s.lunes && fv <= s.domingo;
+      }).length
+    ),
+    backgroundColor: ESTADO_COLORES[estado],
+    borderWidth: 0,
+    borderRadius: 3
+  }));
+
+  if (barrasChart) barrasChart.destroy();
+  const ctx = document.getElementById('barras-canvas').getContext('2d');
+  barrasChart = new Chart(ctx, {
+    type: 'bar',
+    data: { labels: semanas.map(s => s.label), datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10, padding: 8 } } },
+      scales: {
+        x: { stacked: true, ticks: { font: { size: 10 } }, grid: { display: false } },
+        y: { stacked: true, ticks: { font: { size: 10 }, stepSize: 1 }, grid: { color: '#f1f5f9' } }
+      }
+    }
+  });
+}
+
+/* ── Seguimientos ── */
+async function renderSeguimientos(notasArr, clienteMap) {
+  const hoyStr = fechaISO(new Date());
+  const proximas = notasArr
+    .filter(n => n.fecha_seguimiento && n.fecha_seguimiento >= hoyStr)
+    .sort((a, b) => a.fecha_seguimiento.localeCompare(b.fecha_seguimiento))
+    .slice(0, 10);
+
+  const tbody = document.getElementById('seg-tbody');
+  if (!proximas.length) {
+    tbody.innerHTML = `<tr><td colspan="4" class="seg-empty">No hay seguimientos pendientes</td></tr>`;
+    return;
+  }
+
+  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+  tbody.innerHTML = proximas.map(n => {
+    const cliente = clienteMap.get(n.id);
+    const nombre = cliente?.nombre || `Cliente ${n.id}`;
+    const estado = n.estado || 'pendiente';
+    const badgeClass = 'ag-badge badge-' + estado;
+    const fs = new Date(n.fecha_seguimiento); fs.setHours(0, 0, 0, 0);
+    const dias = Math.round((fs - hoy) / 86400000);
+    const diasLabel = dias === 0 ? 'Hoy' : dias === 1 ? 'Mañana' : `en ${dias} días`;
+    const fechaLabel = fs.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
+    const rowBg = estado === 'pospuesta' ? '#fffbeb' : estado === 'realizada' ? '#f0fdf4' : estado === 'no-interesado' ? '#fff5f5' : '';
+    return `<tr style="${rowBg ? 'background:' + rowBg : ''}">
+      <td style="font-weight:600;color:#1e293b">${nombre}</td>
+      <td><span class="${badgeClass}">${ESTADO_LABEL[estado] || estado}</span></td>
+      <td style="white-space:nowrap">${fechaLabel}</td>
+      <td class="seg-dias">${diasLabel}</td>
+    </tr>`;
+  }).join('');
+}
+
+/* ── Arranque ── */
+(async () => {
+  const ok = await checkAuth();
+  if (ok) iniciarApp();
+})();
+</script>
+</body>
+</html>
