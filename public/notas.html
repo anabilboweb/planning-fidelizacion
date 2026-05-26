@@ -944,8 +944,10 @@ function buscar() {
 // STATS
 // ═══════════════════════════════════════════════════════════════
 function actualizarStats() {
+  // Total = todas las empresas del planning (no solo las que tienen nota)
+  const totalEmpresas = dias.reduce((s, d) => s + d.clientes.length, 0);
+  document.getElementById('st-total').textContent = totalEmpresas || Object.keys(notas).length;
   const vals = Object.values(notas);
-  document.getElementById('st-total').textContent = vals.length;
   document.getElementById('st-real').textContent  = vals.filter(n => n.estado === 'realizada').length;
   document.getElementById('st-postp').textContent = vals.filter(n => n.estado === 'pospuesta').length;
   document.getElementById('st-noint').textContent = vals.filter(n => n.estado === 'no-interesado').length;
