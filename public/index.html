@@ -148,7 +148,7 @@
   <a href="/config">⚙️ Config</a>
   <div style="margin-left:auto;display:flex;gap:5px;">
     <button onclick="downloadExcel('planning')" id="btn-xls-plan" style="background:#059669;border:none;color:#fff;padding:4px 12px;border-radius:6px;font-size:11px;cursor:pointer;font-weight:600;">📅 Semanal</button>
-    <button onclick="downloadExcel('completo')" id="btn-xls-full" style="background:#0ea5e9;border:none;color:#fff;padding:4px 12px;border-radius:6px;font-size:11px;cursor:pointer;font-weight:600;">📊 Completo</button>
+    <button onclick="downloadExcelCompleto()" id="btn-xls-full" style="background:#0ea5e9;border:none;color:#fff;padding:4px 12px;border-radius:6px;font-size:11px;cursor:pointer;font-weight:600;">📊 Completo</button>
   </div>
   <button onclick="logoutUser()" style="margin-left:8px;background:transparent;border:1px solid rgba(255,255,255,.3);color:rgba(255,255,255,.7);padding:4px 12px;border-radius:6px;font-size:11px;cursor:pointer;font-weight:600;">
     Salir
@@ -516,6 +516,164 @@ function filter() {
     if (!nr) { nr = document.createElement('div'); nr.id = 'nores'; nr.className = 'nores'; document.getElementById('cal').appendChild(nr); }
     nr.textContent = 'Sin resultados para "' + q + '"';
   } else if (nr) nr.remove();
+}
+
+async function downloadExcelCompleto() {
+  const btnFull = document.getElementById('btn-xls-full');
+  const orig = btnFull ? btnFull.textContent : '';
+  if (btnFull) { btnFull.textContent = '⏳ Cargando…'; btnFull.disabled = true; }
+
+  try {
+    // Cargar clientes y notas directamente de Supabase (sin pasar por planning)
+    const [{ data: clientes, error: errCli }, { data: notasArr }] = await Promise.all([
+      sb.from('clientes').select('id,nombre,direccion,poblacion,cp').eq('activo', true).order('nombre'),
+      sb.from('notas').select('*')
+    ]);
+    if (errCli) throw new Error(errCli.message);
+
+    const notasMap = {};
+    (notasArr || []).forEach(n => { notasMap[n.cliente_id] = n; });
+
+    // Ordenar: realizadas → pospuestas → no-interesadas → pendientes; luego alfabético
+    const ORDEN = { realizada: 0, pospuesta: 1, 'no-interesado': 2, pendiente: 3 };
+    (clientes || []).sort((a, b) => {
+      const oa = ORDEN[notasMap[a.id]?.estado || 'pendiente'] ?? 3;
+      const ob = ORDEN[notasMap[b.id]?.estado || 'pendiente'] ?? 3;
+      return oa !== ob ? oa - ob : a.nombre.localeCompare(b.nombre, 'es');
+    });
+
+    // ── Colores y helpers ExcelJS ──────────────────────────────
+    const AZUL   = 'FF1A56DB';
+    const BLANCO = 'FFFFFFFF';
+    const ESTADO_ARGB = {
+      realizada:      'FFD1FAE5',
+      pospuesta:      'FFFEF3C7',
+      'no-interesado':'FFFEE2E2',
+    };
+    const ESTADO_ES = {
+      pendiente:      '⚪ Pendiente',
+      realizada:      '🟢 Realizada',
+      pospuesta:      '🟠 Pospuesta',
+      'no-interesado':'🔴 No interesado',
+    };
+
+    function hdrStyle(cell) {
+      cell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb: AZUL } };
+      cell.font = { bold:true, color:{ argb: BLANCO }, size:10 };
+      cell.alignment = { vertical:'middle' };
+    }
+    function estadoStyle(cell, estado) {
+      const argb = ESTADO_ARGB[estado];
+      if (argb) cell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb } };
+      cell.font = { bold: true };
+    }
+
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'BilboWeb Planning';
+    wb.created = new Date();
+
+    // ── Pestaña Actividad Comercial ────────────────────────────
+    const wsAC = wb.addWorksheet('Actividad Comercial');
+    wsAC.views = [{ state:'frozen', ySplit:1 }];
+    wsAC.columns = [
+      { header:'Empresa',          key:'nombre',      width:38 },
+      { header:'Municipio',        key:'poblacion',   width:16 },
+      { header:'CP',               key:'cp',          width:8  },
+      { header:'Estado',           key:'estado',      width:18 },
+      { header:'Fecha visita',     key:'fvisita',     width:13 },
+      { header:'Interlocutor',     key:'interlocut',  width:26 },
+      { header:'Interés (1-5)',    key:'interes',     width:11 },
+      { header:'Problema / Dolor', key:'dolor',       width:34 },
+      { header:'Servicios',        key:'servicios',   width:30 },
+      { header:'Próximo paso',     key:'proximopaso', width:30 },
+      { header:'Seguimiento',      key:'seguimiento', width:13 },
+      { header:'Notas libres',     key:'texto',       width:40 },
+      { header:'Actualizado',      key:'actualizado', width:13 },
+    ];
+
+    // Estilo cabecera
+    wsAC.getRow(1).eachCell(c => hdrStyle(c));
+    wsAC.getRow(1).height = 20;
+
+    (clientes || []).forEach(c => {
+      const n        = notasMap[c.id] || {};
+      const estado   = n.estado || 'pendiente';
+      let servicios  = '';
+      try { servicios = Array.isArray(n.servicios) ? n.servicios.join(' | ') : JSON.parse(n.servicios || '[]').join(' | '); } catch(e) {}
+
+      const row = wsAC.addRow({
+        nombre:      c.nombre,
+        poblacion:   c.poblacion,
+        cp:          c.cp,
+        estado:      ESTADO_ES[estado] || '⚪ Pendiente',
+        fvisita:     n.fecha_visita || '',
+        interlocut:  n.interlocutor || '',
+        interes:     n.interes || '',
+        dolor:       (n.dolor        || '').replace(/\n/g,' '),
+        servicios,
+        proximopaso: (n.proximo_paso || '').replace(/\n/g,' '),
+        seguimiento: n.fecha_seguimiento || '',
+        texto:       (n.texto         || '').replace(/\n/g,' '),
+        actualizado: n.actualizado_en ? new Date(n.actualizado_en).toLocaleDateString('es-ES') : '',
+      });
+
+      row.eachCell(cell => { cell.alignment = { vertical:'middle', wrapText: false }; });
+      estadoStyle(row.getCell('estado'), estado);
+    });
+
+    // ── Pestaña Resumen ────────────────────────────────────────
+    const wsRes = wb.addWorksheet('Resumen');
+    wsRes.columns = [{ width:22 }, { width:14 }, { width:12 }];
+
+    const total = (clientes || []).length;
+    const cnt   = { realizada:0, pospuesta:0, 'no-interesado':0, pendiente:0 };
+    (clientes || []).forEach(c => {
+      const e = notasMap[c.id]?.estado || 'pendiente';
+      cnt[e] !== undefined ? cnt[e]++ : cnt.pendiente++;
+    });
+    const pct = n => total ? ((n / total) * 100).toFixed(1) + '%' : '0%';
+
+    const titleRow = wsRes.addRow(['Resumen de actividad comercial']);
+    titleRow.getCell(1).font = { bold:true, size:13, color:{ argb: AZUL } };
+    wsRes.addRow([]);
+
+    const hRow = wsRes.addRow(['Estado', 'Nº clientes', '% del total']);
+    hRow.eachCell(c => hdrStyle(c));
+
+    [
+      ['⚪ Pendiente',     cnt.pendiente,       'pendiente'],
+      ['🟢 Realizada',     cnt.realizada,       'realizada'],
+      ['🟠 Pospuesta',     cnt.pospuesta,       'pospuesta'],
+      ['🔴 No interesado', cnt['no-interesado'],'no-interesado'],
+    ].forEach(([label, n, est]) => {
+      const row = wsRes.addRow([label, n, pct(n)]);
+      row.eachCell(cell => { cell.alignment = { vertical:'middle' }; estadoStyle(cell, est); });
+      row.getCell(1).font = { bold:true };
+    });
+
+    wsRes.addRow([]);
+    const totRow = wsRes.addRow(['TOTAL', total, '100%']);
+    totRow.eachCell(c => { c.font = { bold:true }; });
+    wsRes.addRow([]);
+    wsRes.addRow(['Generado el', new Date().toLocaleDateString('es-ES',
+      { day:'2-digit', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit' })]);
+
+    // ── Descargar ──────────────────────────────────────────────
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob   = new Blob([buffer], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url    = URL.createObjectURL(blob);
+    const a      = document.createElement('a');
+    a.href       = url;
+    a.download   = `actividad_comercial_${new Date().toISOString().slice(0,10)}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    if (btnFull) { btnFull.textContent = orig; btnFull.disabled = false; }
+    toast('✅ Excel completo descargado');
+  } catch(e) {
+    if (btnFull) { btnFull.textContent = orig; btnFull.disabled = false; }
+    alert('❌ Error generando Excel: ' + e.message);
+  }
 }
 
 async function downloadExcel(tipo) {
