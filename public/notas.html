@@ -209,6 +209,14 @@
                       border-top:1px solid #e2e8f0;background:#f8fafc;}
     #historial-toggle:hover{color:#1a56db;}
 
+    /* Vista filtrada plana */
+    #cal-filtrado { overflow-y: auto; flex: 1; padding: 8px; }
+    .flat-empty { text-align:center;color:#94a3b8;font-size:13px;padding:24px;line-height:1.6; }
+    .flat-item { display:flex;align-items:center;gap:8px;padding:8px 11px;background:#fff;
+                 border:1px solid #e2e8f0;border-radius:8px;margin-bottom:5px;cursor:pointer;transition:background .1s; }
+    .flat-item:hover { background:#f8fafc; }
+    .flat-tag { font-size:9px;font-weight:600;color:#94a3b8;margin-top:2px;display:block; }
+
     /* ── MÓVIL ─────────────────────────────────────────────── */
     @media (max-width: 768px) {
       /* Nav scroll horizontal */
@@ -317,7 +325,8 @@
   </div>
 
   <div id="cal"></div>
-  <div id="cal-historial"></div>
+  <div id="cal-filtrado" style="display:none;overflow-y:auto;flex:1;padding:8px;"></div>
+  <div id="cal-historial" style="display:none;"></div>
 
   <button id="exportBtn" onclick="exportarCSV()">⬇ Exportar notas CSV</button>
 </div>
@@ -502,6 +511,7 @@ let filtroActual  = 'todos';
 let activeDay     = null;
 let mkrs          = {};
 let lines         = {};
+let allClientsFlat = [];  // todas las empresas: planning + huérfanas con notas
 
 const BASE = { lat: 43.2956, lon: -2.9921 };
 
@@ -680,7 +690,7 @@ function buildSidebar() {
   });
 
   buildMarkers();
-  applyFilter();
+  render();
 }
 
 function buildMarkers() {
@@ -847,45 +857,87 @@ function filtrar(f) {
   document.querySelectorAll('.filtro-btn').forEach(b => {
     b.classList.toggle('activo', b.dataset.f === f);
   });
-  applyFilter();
-  applyFilterHistorial();
+  render();
 }
 
-function applyFilter() {
-  dias.forEach(day => {
-    day.clientes.forEach(c => {
-      const row = document.getElementById('row-' + c.id);
-      if (!row) return;
-      const est  = (notas[c.id] || {}).estado || 'pendiente';
-      const show = filtroActual === 'todos' || est === filtroActual;
-      row.style.display = show ? '' : 'none';
-    });
+function applyFilter() { render(); }
+
+function buildFlatFiltered(estado, q) {
+  const div = document.getElementById('cal-filtrado');
+  div.innerHTML = '';
+
+  const matches = allClientsFlat.filter(c => {
+    const cEstado = (notas[c.id] || {}).estado || 'pendiente';
+    const estadoOk = cEstado === estado;
+    const matchQ = !q || (c.nombre||'').toLowerCase().includes(q)
+                       || (c.poblacion||'').toLowerCase().includes(q)
+                       || (c.direccion||'').toLowerCase().includes(q);
+    return estadoOk && matchQ;
   });
+
+  if (!matches.length) {
+    div.innerHTML = `<div class="flat-empty">Sin empresas con estado<br><strong>${estadoLabel(estado)}</strong></div>`;
+    return;
+  }
+
+  matches.forEach(c => {
+    const nota = notas[c.id] || {};
+    const est  = nota.estado || 'pendiente';
+    const col  = c.enPlanning ? (c.dayColor || '#1a56db') : '#475569';
+    const row  = document.createElement('div');
+    row.className = 'flat-item';
+    row.innerHTML = `
+      <div class="cli-num" style="background:${col};flex-shrink:0">${c.order || '—'}</div>
+      <div class="cli-info" style="flex:1;min-width:0">
+        <div class="cli-name">${c.nombre}</div>
+        <div class="cli-sub">${c.poblacion || ''}${c.cp ? ' · ' + c.cp : ''}</div>
+        <span class="flat-tag">${c.enPlanning ? '📅 ' + c.dayLabel : '⚠️ Fuera del planning actual'}</span>
+      </div>
+      <span class="estado-pill ep-${est}">${estadoLabel(est)}</span>`;
+    row.onclick = () => abrirDrawer(c, {}, -1);
+    div.appendChild(row);
+  });
+}
+
+function render() {
+  const q      = (document.getElementById('q')?.value || '').toLowerCase().trim();
+  const calDiv = document.getElementById('cal');
+  const calH   = document.getElementById('cal-historial');
+  const calF   = document.getElementById('cal-filtrado');
+
+  if (filtroActual === 'todos') {
+    calDiv.style.display = '';
+    calH.style.display   = 'none';
+    calF.style.display   = 'none';
+
+    dias.forEach((day, di) => {
+      let hit = false;
+      day.clientes.forEach(c => {
+        const row = document.getElementById('row-' + c.id);
+        if (!row) return;
+        const match = !q || (c.nombre||'').toLowerCase().includes(q)
+                          || (c.poblacion||'').toLowerCase().includes(q)
+                          || (c.direccion||'').toLowerCase().includes(q);
+        row.style.display = match ? '' : 'none';
+        if (match) hit = true;
+      });
+      const card = document.getElementById('day-' + di);
+      if (card) {
+        card.style.display = (q && !hit) ? 'none' : '';
+        if (q && hit && !card.classList.contains('open')) card.classList.add('open');
+      }
+    });
+
+  } else {
+    calDiv.style.display = 'none';
+    calH.style.display   = 'none';
+    calF.style.display   = '';
+    buildFlatFiltered(filtroActual, q);
+  }
 }
 
 function buscar() {
-  const q = document.getElementById('q').value.toLowerCase().trim();
-  dias.forEach((day, di) => {
-    let hayCoincidencia = false;
-    day.clientes.forEach(c => {
-      const row = document.getElementById('row-' + c.id);
-      if (!row) return;
-      const match = !q
-        || (c.nombre  || '').toLowerCase().includes(q)
-        || (c.poblacion || '').toLowerCase().includes(q)
-        || (c.direccion || '').toLowerCase().includes(q);
-      row.style.display = match ? '' : 'none';
-      if (match) hayCoincidencia = true;
-    });
-    const card = document.getElementById('day-' + di);
-    if (card) {
-      card.style.display = (q && !hayCoincidencia) ? 'none' : '';
-      if (q && hayCoincidencia && !card.classList.contains('open')) {
-        card.classList.add('open');
-      }
-    }
-  });
-  applyFilterHistorial();
+  render();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1021,8 +1073,23 @@ async function init() {
       }
     }
 
+    // Construir lista plana de todas las empresas (planning + huérfanas)
+    allClientsFlat = [];
+    diasAdaptados.forEach(day => {
+      day.clientes.forEach(c => {
+        allClientsFlat.push({ ...c, dayLabel: day.label, dayColor: day.color || '#1a56db', enPlanning: true });
+      });
+    });
+    if (diasHistorial.length > 0) {
+      diasHistorial[0].clientes.forEach(c => {
+        allClientsFlat.push({
+          ...c, dayLabel: 'Fuera del planning actual', dayColor: '#475569', enPlanning: false,
+          order: '—', llegada: '', salida: ''
+        });
+      });
+    }
+
     buildAll({ dias: diasAdaptados });
-    buildHistorial(diasHistorial);
     actualizarStats();
     const paramId = new URLSearchParams(location.search).get('id');
     if (paramId) {
