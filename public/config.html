@@ -236,20 +236,25 @@
             </div>
             <div class="fgroup" style="flex:3">
               <label class="flabel" for="baseDireccion">Dirección</label>
-              <input type="text" id="baseDireccion" class="finput">
+              <div style="display:flex;gap:8px;align-items:center;">
+                <input type="text" id="baseDireccion" class="finput"
+                       placeholder="Calle, Ciudad, Provincia"
+                       onblur="geocodificarBase()">
+                <button type="button" onclick="geocodificarBase()"
+                  style="padding:8px 14px;background:#1a56db;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0;">
+                  📍 Localizar
+                </button>
+              </div>
+              <div id="base-geo-status" style="margin-top:5px;font-size:12px;display:none;"></div>
+              <div id="base-coords-display" style="display:none;margin-top:4px;font-size:11px;color:#94a3b8;">
+                📌 Coordenadas: <span id="base-coords-text"></span>
+              </div>
             </div>
           </div>
 
-          <div class="row2">
-            <div class="fgroup">
-              <label class="flabel" for="baseLat">Latitud</label>
-              <input type="number" id="baseLat" class="finput" step="0.0001">
-            </div>
-            <div class="fgroup">
-              <label class="flabel" for="baseLon">Longitud</label>
-              <input type="number" id="baseLon" class="finput" step="0.0001">
-            </div>
-          </div>
+          <!-- Coordenadas guardadas internamente (no visibles) -->
+          <input type="hidden" id="baseLat">
+          <input type="hidden" id="baseLon">
         </div>
 
         <!-- 3. FILTROS -->
@@ -464,6 +469,11 @@ async function cargarConfig() {
     if (base.direccion) document.getElementById('baseDireccion').value = base.direccion;
     if (base.lat != null) document.getElementById('baseLat').value = base.lat;
     if (base.lon != null) document.getElementById('baseLon').value = base.lon;
+    if (base.lat != null && base.lon != null) {
+      document.getElementById('base-coords-text').textContent =
+        `${parseFloat(base.lat).toFixed(5)}, ${parseFloat(base.lon).toFixed(5)}`;
+      document.getElementById('base-coords-display').style.display = 'block';
+    }
 
     const filtros = data.filtros || {};
     if (Array.isArray(filtros.excluirClientes)) document.getElementById('excluirClientes').value = filtros.excluirClientes.join('\n');
@@ -485,6 +495,14 @@ async function guardarConfig() {
   btn.disabled = true;
 
   const lineas = t => t.split('\n').map(s => s.trim()).filter(Boolean);
+
+  // Si hay dirección pero no coordenadas, geocodificar antes de guardar
+  const baseDir = document.getElementById('baseDireccion').value.trim();
+  const baseLat0 = parseFloat(document.getElementById('baseLat').value);
+  const baseLon0 = parseFloat(document.getElementById('baseLon').value);
+  if (baseDir && (!baseLat0 || !baseLon0)) {
+    await geocodificarBase();
+  }
 
   const payload = {
     id: 1,
@@ -521,6 +539,50 @@ async function guardarConfig() {
     toast('❌ Error al guardar: ' + e.message);
   } finally {
     btn.disabled = false;
+  }
+}
+
+async function geocodificarBase() {
+  const dir = document.getElementById('baseDireccion').value.trim();
+  const key = document.getElementById('googleApiKey').value.trim();
+  const st  = document.getElementById('base-geo-status');
+  const coordsDisplay = document.getElementById('base-coords-display');
+  const coordsText    = document.getElementById('base-coords-text');
+
+  if (!dir) return;
+
+  if (!key) {
+    st.style.display = 'block';
+    st.style.color   = '#dc2626';
+    st.textContent   = '⚠️ Introduce primero la API Key de Google Maps (sección inferior)';
+    return;
+  }
+
+  st.style.display = 'block';
+  st.style.color   = '#64748b';
+  st.textContent   = '⏳ Buscando coordenadas…';
+
+  try {
+    const r = await fetch(
+      `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(dir)}&key=${key}`
+    );
+    const d = await r.json();
+
+    if (d.status === 'OK') {
+      const loc = d.results[0].geometry.location;
+      document.getElementById('baseLat').value = loc.lat;
+      document.getElementById('baseLon').value = loc.lng;
+      coordsText.textContent = `${loc.lat.toFixed(5)}, ${loc.lng.toFixed(5)}`;
+      coordsDisplay.style.display = 'block';
+      st.style.color = '#059669';
+      st.textContent = `✅ ${d.results[0].formatted_address}`;
+    } else {
+      st.style.color = '#dc2626';
+      st.textContent = `❌ Dirección no encontrada (${d.status}) — prueba con más detalle`;
+    }
+  } catch(e) {
+    st.style.color = '#dc2626';
+    st.textContent = '❌ Error de red: ' + e.message;
   }
 }
 
