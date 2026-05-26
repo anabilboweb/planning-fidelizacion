@@ -93,6 +93,28 @@
     /* Indicador andando */
     .badge-walk{font-size:9px;background:#d1fae5;color:#065f46;border-radius:4px;
                 padding:1px 5px;font-weight:700;margin-left:4px;}
+
+    /* ── MÓVIL ─────────────────────────────────────────────── */
+    @media (max-width: 768px) {
+      /* Nav: scroll horizontal para que no se rompa */
+      #nav { overflow-x: auto; overflow-y: hidden; padding: 0 8px; gap: 0; flex-shrink: 0; }
+      #nav a { font-size: 11px; padding: 0 9px; white-space: nowrap; }
+      #nav > div { flex-shrink: 0; }
+      #nav > button { flex-shrink: 0; margin-left: 4px !important; }
+
+      /* Layout apilado: lista arriba, mapa abajo */
+      #app { flex-direction: column; }
+      #sidebar { width: 100%; min-width: 0; height: 58vh; flex-shrink: 0;
+                 box-shadow: 0 3px 12px rgba(0,0,0,.12); }
+      #map { height: 42vh; flex: none; }
+
+      /* Cards más compactas */
+      .card-hdr { font-size: 12px; padding: 8px 10px; }
+      .cli-row { padding: 6px 9px; gap: 6px; }
+      .cli-name { font-size: 11.5px; }
+      .cli-sub, .cli-drv { font-size: 10px; }
+      .stat .n { font-size: 18px; }
+    }
   </style>
 </head>
 <body>

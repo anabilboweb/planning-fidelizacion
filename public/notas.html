@@ -208,6 +208,38 @@
                       font-weight:600;color:#64748b;cursor:pointer;
                       border-top:1px solid #e2e8f0;background:#f8fafc;}
     #historial-toggle:hover{color:#1a56db;}
+
+    /* ── MÓVIL ─────────────────────────────────────────────── */
+    @media (max-width: 768px) {
+      /* Nav scroll horizontal */
+      #nav { overflow-x: auto; overflow-y: hidden; padding: 0 8px; gap: 0; flex-shrink: 0; }
+      #nav a { font-size: 11px; padding: 0 9px; white-space: nowrap; }
+
+      /* Layout apilado */
+      #main { flex-direction: column; }
+      #sidebar { width: 100%; min-width: 0; height: 60vh; flex-shrink: 0;
+                 box-shadow: 0 3px 12px rgba(0,0,0,.12); }
+      #map { height: 40vh; flex: none; }
+
+      /* Filtros en dos líneas */
+      #filtros { gap: 4px; padding: 7px 10px; }
+      .filtro-btn { font-size: 10px; padding: 3px 7px; }
+
+      /* Stats más compactos */
+      .stat .n { font-size: 16px; }
+      .stat .l { font-size: 8px; }
+
+      /* Drawer full-width en móvil */
+      #drawer { width: 100%; right: -100%; }
+      #drawer.open { right: 0; }
+
+      /* Botones estado en 2x2 */
+      .estado-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+      .estado-opt { flex: none; }
+
+      /* Servicios más compactos */
+      .srv-opt { font-size: 11px; padding: 4px 8px; }
+    }
   </style>
 </head>
 <body>

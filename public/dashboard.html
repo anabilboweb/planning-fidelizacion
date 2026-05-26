@@ -102,6 +102,34 @@
     .modo-ejemplo .kpi .num{color:#93c5fd;}
     .modo-ejemplo .kpi{opacity:.85;}
     .modo-ejemplo #agenda-zona,.modo-ejemplo .chart-card,.modo-ejemplo #seg-card{opacity:.82;}
+
+    /* ── MÓVIL ─────────────────────────────────────────────── */
+    @media (max-width: 768px) {
+      body { overflow: auto; }
+
+      /* Nav scroll horizontal */
+      #nav { overflow-x: auto; overflow-y: hidden; padding: 0 8px; gap: 0; }
+      #nav a { font-size: 11px; padding: 0 9px; white-space: nowrap; }
+      #nav .nav-right { flex-shrink: 0; margin-left: 8px; }
+
+      /* Quitar overflow:hidden del body/content para scroll vertical */
+      #content { overflow: visible; height: auto; flex: none; gap: 8px; padding: 8px; }
+
+      /* KPIs: 2 columnas */
+      #kpis { flex-wrap: wrap; }
+      #kpis .kpi { flex: 1 1 calc(50% - 5px); min-width: 0; }
+      .kpi .num { font-size: 24px; }
+
+      /* Agenda compacta */
+      #agenda-zona { max-height: none; }
+
+      /* Bottom: apilar columnas */
+      #bottom { flex-direction: column; overflow: visible; min-height: 0; }
+      #left-col { width: 100%; }
+
+      /* Tabla seguimientos más compacta */
+      #seg-table th, #seg-table td { font-size: 11px; padding: 4px 6px; }
+    }
   </style>
 </head>
 <body>

@@ -24,7 +24,20 @@
           width:100%;margin:0 auto;}
     .col-left{flex:6;min-width:0;}
     .col-right{flex:4;min-width:320px;}
-    @media(max-width:768px){#main{flex-direction:column;padding:14px;}.col-right{min-width:0;}}
+    @media(max-width:768px){
+      #main{flex-direction:column;padding:12px;}
+      .col-right{min-width:0;}
+      .row2{flex-direction:column;gap:0;}
+      .row2 .fgroup{width:100%;}
+      .slider-wrap input[type=range]{height:6px;}
+      .finput{font-size:14px;padding:10px 12px;}
+      /* Nav scroll */
+      #nav{overflow-x:auto;padding:0 8px;}
+      #nav a{font-size:11px;padding:0 9px;white-space:nowrap;}
+      /* Botones de la sección base */
+      #baseDireccion + button,
+      div[style*="display:flex"] > button { white-space: nowrap; }
+    }
 
     /* ── Cards ── */
     .card{background:#fff;border-radius:12px;
