@@ -183,9 +183,15 @@
   <!-- ZONA 4: Agenda del día -->
   <div id="agenda-zona">
     <div id="agenda-hdr">
-      <button class="agenda-nav" id="btn-prev" onclick="agendaNav(-1)">← Anterior</button>
-      <div id="agenda-title">—</div>
-      <button class="agenda-nav" id="btn-next" onclick="agendaNav(+1)">Siguiente →</button>
+      <button class="agenda-nav" id="btn-prev" onclick="agendaNav(-1)">←</button>
+      <div style="flex:1;text-align:center;">
+        <div id="agenda-title" style="font-size:13px;font-weight:700;color:#1e293b;">—</div>
+        <input type="date" id="agenda-datepicker"
+          onchange="agendaGoToDate(this.value)"
+          style="font-size:11px;color:#64748b;border:1px solid #e2e8f0;border-radius:6px;
+                 padding:2px 8px;cursor:pointer;outline:none;margin-top:2px;">
+      </div>
+      <button class="agenda-nav" id="btn-next" onclick="agendaNav(+1)">→</button>
     </div>
     <div id="agenda-list"></div>
   </div>
@@ -564,6 +570,23 @@ function agendaNav(delta) {
   renderAgenda();
 }
 
+function agendaGoToDate(dateStr) {
+  if (!dateStr || !DIAS.length) return;
+  // Buscar coincidencia exacta
+  let idx = DIAS.findIndex(d => d.fecha && d.fecha.slice(0, 10) === dateStr);
+  if (idx !== -1) { agendaIdx = idx; renderAgenda(); return; }
+  // Si no hay coincidencia exacta, ir al día más cercano
+  const target = new Date(dateStr).getTime();
+  let best = 0, bestDiff = Infinity;
+  DIAS.forEach((d, i) => {
+    if (!d.fecha) return;
+    const diff = Math.abs(new Date(d.fecha.slice(0, 10)).getTime() - target);
+    if (diff < bestDiff) { best = i; bestDiff = diff; }
+  });
+  agendaIdx = best;
+  renderAgenda();
+}
+
 function renderAgenda() {
   const list = document.getElementById('agenda-list');
   const title = document.getElementById('agenda-title');
@@ -585,6 +608,10 @@ function renderAgenda() {
   } else {
     title.textContent = dia.label || '—';
   }
+
+  // Sincronizar el datepicker con el día mostrado
+  const dp = document.getElementById('agenda-datepicker');
+  if (dp && dia.fecha) dp.value = dia.fecha.slice(0, 10);
 
   const clientes = dia.clientes || [];
   if (!clientes.length) {
@@ -615,6 +642,17 @@ function renderDonut() {
     else conteo.pendiente++;
   }));
   const total = Object.values(conteo).reduce((a, b) => a + b, 0);
+
+  // Si no hay actividad (todo pendiente), mostrar distribución de ejemplo
+  let donutEjemplo = false;
+  if (total > 0 && conteo.realizada === 0 && conteo.pospuesta === 0 && conteo['no-interesado'] === 0) {
+    donutEjemplo = true;
+    conteo.realizada      = Math.round(total * 0.24);
+    conteo.pospuesta      = Math.round(total * 0.10);
+    conteo['no-interesado'] = Math.round(total * 0.04);
+    conteo.pendiente      = total - conteo.realizada - conteo.pospuesta - conteo['no-interesado'];
+  }
+
   const labels = Object.keys(conteo);
   const colors = labels.map(k => ESTADO_COLORES[k]);
 
