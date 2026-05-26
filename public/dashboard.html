@@ -197,16 +197,14 @@
       <div class="chart-card" style="flex-shrink:0;">
         <h3>Estados — Planning actual</h3>
         <div id="donut-wrap">
-          <div id="donut-canvas-wrap"><canvas id="donut-canvas"></canvas></div>
+          <div id="donut-svg-wrap"></div>
           <div id="donut-legend"></div>
         </div>
       </div>
       <!-- ZONA 2b: Barras semanales -->
-      <div class="chart-card barras-card" style="flex:1;min-height:0;display:flex;flex-direction:column;">
+      <div class="chart-card" style="flex:1;min-height:0;display:flex;flex-direction:column;">
         <h3>Visitas por semana (últimas 6)</h3>
-        <div style="flex:1;min-height:0;position:relative;">
-          <canvas id="barras-canvas"></canvas>
-        </div>
+        <div id="barras-wrap" style="flex:1;min-height:0;display:flex;flex-direction:column;"></div>
       </div>
     </div>
 
@@ -238,35 +236,6 @@ window.onerror = function(msg, src, line) {
   return false;
 };
 
-// Carga Chart.js dinámicamente con fallback de 3 CDNs
-function cargarChartJS() {
-  return new Promise((resolve) => {
-    if (typeof Chart !== 'undefined') { resolve(true); return; }
-    const cdns = [
-      'https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js',
-      'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.3/chart.umd.min.js',
-      'https://unpkg.com/chart.js@4.4.3/dist/chart.umd.min.js'
-    ];
-    let i = 0;
-    function tryNext() {
-      if (i >= cdns.length) { resolve(false); return; }
-      const s = document.createElement('script');
-      s.src = cdns[i++];
-      s.onload = () => resolve(true);
-      s.onerror = tryNext;
-      document.head.appendChild(s);
-    }
-    tryNext();
-  });
-}
-
-let _chartRegistered = false;
-function ensureChart() {
-  if (_chartRegistered) return true;
-  if (typeof Chart === 'undefined') return false;
-  try { Chart.register(...Chart.registerables); _chartRegistered = true; return true; }
-  catch(e) { console.warn('Chart.register falló:', e); return false; }
-}
 
 // Supabase en try-catch: si la CDN no cargó, el dashboard sigue mostrando mock
 let sb = null;
@@ -388,10 +357,8 @@ const ESTADO_LABEL = {
 let DIAS = [];
 let NOTAS_MAP = new Map();
 let agendaIdx = 0;
-let donutChart = null;
-let barrasChart = null;
 let MODO_EJEMPLO = false;
-let NOTAS_ACTUAL = []; // para poder reintentar gráficos si Chart.js carga tarde
+let NOTAS_ACTUAL = [];
 
 /* ── Datos de ejemplo (solo cuando no hay datos reales) ── */
 function getMockData() {
@@ -639,36 +606,45 @@ function renderAgenda() {
   }).join('');
 }
 
-/* ── Donut ── */
+/* ── Donut SVG puro (sin Chart.js) ── */
 function renderDonut() {
-  if (!ensureChart()) return; // Chart.js aún no listo — window.onload reintentará
   const conteo = { pendiente: 0, pospuesta: 0, realizada: 0, 'no-interesado': 0 };
   DIAS.forEach(d => (d.clientes || []).forEach(c => {
     const estado = NOTAS_MAP.get(c.id)?.estado || c.estado || 'pendiente';
     if (conteo[estado] !== undefined) conteo[estado]++;
     else conteo.pendiente++;
   }));
-
   const total = Object.values(conteo).reduce((a, b) => a + b, 0);
   const labels = Object.keys(conteo);
-  const data   = labels.map(k => conteo[k]);
   const colors = labels.map(k => ESTADO_COLORES[k]);
 
-  if (donutChart) donutChart.destroy();
-  const ctx = document.getElementById('donut-canvas').getContext('2d');
-  donutChart = new Chart(ctx, {
-    type: 'doughnut',
-    data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 2, borderColor: '#fff' }] },
-    options: {
-      cutout: '68%',
-      plugins: { legend: { display: false }, tooltip: { enabled: true } },
-      responsive: true,
-      maintainAspectRatio: true
-    }
-  });
+  const r = 52, cx = 70, cy = 70, sw = 22;
+  const C = 2 * Math.PI * r;
+  let acc = 0;
+  const circles = labels.map((k, i) => {
+    const v = conteo[k];
+    if (!v || !total) return '';
+    const len = (v / total) * C;
+    const offset = ((C / 4 - acc) % C + C) % C;
+    acc += len;
+    return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none"
+      stroke="${colors[i]}" stroke-width="${sw}"
+      stroke-dasharray="${len.toFixed(2)} ${(C-len).toFixed(2)}"
+      stroke-dashoffset="${offset.toFixed(2)}"/>`;
+  }).join('');
 
-  const legend = document.getElementById('donut-legend');
-  legend.innerHTML = labels.map((k, i) => {
+  document.getElementById('donut-svg-wrap').innerHTML = total > 0
+    ? `<svg width="140" height="140" viewBox="0 0 140 140">
+        <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#f1f5f9" stroke-width="${sw}"/>
+        ${circles}
+        <text x="${cx}" y="${cy-4}" text-anchor="middle" dominant-baseline="middle"
+          font-size="26" font-weight="800" fill="#1a56db">${total}</text>
+        <text x="${cx}" y="${cy+16}" text-anchor="middle"
+          font-size="9" fill="#94a3b8">clientes</text>
+      </svg>`
+    : `<div style="width:140px;height:140px;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:12px">Sin datos</div>`;
+
+  document.getElementById('donut-legend').innerHTML = labels.map((k, i) => {
     const pct = total > 0 ? Math.round((conteo[k] / total) * 100) : 0;
     return `<div class="legend-item">
       <div class="legend-dot" style="background:${colors[i]}"></div>
@@ -679,49 +655,54 @@ function renderDonut() {
   }).join('');
 }
 
-/* ── Barras semanales ── */
+/* ── Barras semanales con divs CSS (sin Chart.js) ── */
 function renderBarras(notasArr) {
-  if (!ensureChart()) return; // Chart.js aún no listo — window.onload reintentará
   const hoy = new Date();
   const semanas = [];
   for (let i = 5; i >= 0; i--) {
     const ref = new Date(hoy);
     ref.setDate(ref.getDate() - i * 7);
     const [yr, wk] = isoWeek(ref);
-    semanas.push({ yr, wk, label: `S${String(wk).padStart(2, '0')} ${yr}`, lunes: lunes(ref), domingo: domingo(ref) });
+    semanas.push({ label: `S${String(wk).padStart(2,'0')}`, lun: lunes(ref), dom: domingo(ref) });
   }
-
-  const estados = ['pendiente', 'pospuesta', 'realizada', 'no-interesado'];
-  const datasets = estados.map(estado => ({
-    label: ESTADO_LABEL[estado],
-    data: semanas.map(s =>
-      notasArr.filter(n => {
-        if ((n.estado || 'pendiente') !== estado) return false;
-        if (!n.fecha_visita) return false;
-        const fv = new Date(n.fecha_visita);
-        return fv >= s.lunes && fv <= s.domingo;
-      }).length
-    ),
-    backgroundColor: ESTADO_COLORES[estado],
-    borderWidth: 0,
-    borderRadius: 3
-  }));
-
-  if (barrasChart) barrasChart.destroy();
-  const ctx = document.getElementById('barras-canvas').getContext('2d');
-  barrasChart = new Chart(ctx, {
-    type: 'bar',
-    data: { labels: semanas.map(s => s.label), datasets },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10, padding: 8 } } },
-      scales: {
-        x: { stacked: true, ticks: { font: { size: 10 } }, grid: { display: false } },
-        y: { stacked: true, ticks: { font: { size: 10 }, stepSize: 1 }, grid: { color: '#f1f5f9' } }
+  const estados = ['realizada','pospuesta','no-interesado','pendiente'];
+  const data = semanas.map(s => {
+    const cnt = {}; estados.forEach(e => { cnt[e] = 0; });
+    notasArr.forEach(n => {
+      if (!n.fecha_visita) return;
+      const fv = new Date(n.fecha_visita);
+      if (fv >= s.lun && fv <= s.dom) {
+        const e = n.estado || 'pendiente';
+        if (cnt[e] !== undefined) cnt[e]++; else cnt.pendiente++;
       }
-    }
+    });
+    return { ...s, cnt, total: Object.values(cnt).reduce((a,b)=>a+b,0) };
   });
+  const maxT = Math.max(...data.map(d => d.total), 1);
+
+  document.getElementById('barras-wrap').innerHTML = `
+    <div style="flex:1;display:flex;align-items:flex-end;gap:4px;padding:4px 0 0;min-height:80px;">
+      ${data.map(s => `
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;">
+          <div style="width:100%;display:flex;flex-direction:column;justify-content:flex-end;height:80px;gap:1px">
+            ${estados.map(e => {
+              const h = s.total > 0 ? Math.round((s.cnt[e]/maxT)*76) : 0;
+              return h > 0
+                ? `<div style="width:100%;height:${h}px;background:${ESTADO_COLORES[e]};border-radius:2px 2px 0 0"
+                     title="${ESTADO_LABEL[e]}: ${s.cnt[e]}"></div>`
+                : '';
+            }).join('')}
+          </div>
+          <div style="font-size:9px;color:#94a3b8;margin-top:3px">${s.label}</div>
+          <div style="font-size:9px;color:#475569;font-weight:700">${s.total||''}</div>
+        </div>`).join('')}
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;padding:6px 0 2px;font-size:10px;color:#475569">
+      ${estados.map(e=>`<span style="display:flex;align-items:center;gap:3px">
+        <span style="width:8px;height:8px;background:${ESTADO_COLORES[e]};border-radius:50%;display:inline-block"></span>
+        ${ESTADO_LABEL[e]}</span>`).join('')}
+    </div>`
+  ;
 }
 
 /* ── Seguimientos ── */
@@ -762,20 +743,11 @@ async function renderSeguimientos(notasArr, clienteMap) {
 // Render mock de forma síncrona — independiente de red, auth y Chart.js
 renderConMock();
 
-// Chart.js + Auth en paralelo
+// Auth y datos reales en background
 (async () => {
-  // Cargar Chart.js y renderizar gráficas en cuanto esté disponible
-  cargarChartJS().then(ok => {
-    if (ok) { renderDonut(); renderBarras(NOTAS_ACTUAL); }
-    else console.warn('Chart.js no disponible en ningún CDN');
-  });
-
-  // Auth y datos reales (se ejecuta en paralelo a la carga de Chart.js)
   const ok = await checkAuth();
   if (!ok) return;
   await cargarDatos();
-  // Tras cargar datos reales, re-renderizar gráficas si Chart.js ya está
-  if (_chartRegistered) { renderDonut(); renderBarras(NOTAS_ACTUAL); }
 })();
 </script>
 </body>
