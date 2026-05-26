@@ -359,6 +359,7 @@ let agendaIdx = 0;
 let donutChart = null;
 let barrasChart = null;
 let MODO_EJEMPLO = false;
+let NOTAS_ACTUAL = []; // para poder reintentar gráficos si Chart.js carga tarde
 
 /* ── Datos de ejemplo (solo cuando no hay datos reales) ── */
 function getMockData() {
@@ -438,6 +439,7 @@ function getMockData() {
 
 /* ── Render helper compartido ── */
 function renderTodo(notasArr, clienteMap) {
+  NOTAS_ACTUAL = notasArr; // guardar para reintentos de gráficos
   renderKPIs(notasArr);
   agendaIdx = hoyIndex();
   renderAgenda();
@@ -606,10 +608,7 @@ function renderAgenda() {
 
 /* ── Donut ── */
 function renderDonut() {
-  if (!ensureChart()) {
-    document.getElementById('donut-wrap').innerHTML = '<span style="color:#94a3b8;font-size:12px">Gráfica no disponible</span>';
-    return;
-  }
+  if (!ensureChart()) return; // Chart.js aún no listo — window.onload reintentará
   const conteo = { pendiente: 0, pospuesta: 0, realizada: 0, 'no-interesado': 0 };
   DIAS.forEach(d => (d.clientes || []).forEach(c => {
     const estado = NOTAS_MAP.get(c.id)?.estado || c.estado || 'pendiente';
@@ -649,10 +648,7 @@ function renderDonut() {
 
 /* ── Barras semanales ── */
 function renderBarras(notasArr) {
-  if (!ensureChart()) {
-    document.getElementById('barras-canvas-wrap').innerHTML = '<span style="color:#94a3b8;font-size:12px">Gráfica no disponible</span>';
-    return;
-  }
+  if (!ensureChart()) return; // Chart.js aún no listo — window.onload reintentará
   const hoy = new Date();
   const semanas = [];
   for (let i = 5; i >= 0; i--) {
@@ -728,6 +724,16 @@ async function renderSeguimientos(notasArr, clienteMap) {
     </tr>`;
   }).join('');
 }
+
+/* ── Reintento de gráficos cuando la página termina de cargar ── */
+window.addEventListener('load', () => {
+  // Si Chart.js no estaba listo cuando renderTodo se llamó por primera vez,
+  // lo intentamos ahora que todos los recursos externos están cargados.
+  if (!_chartRegistered && NOTAS_ACTUAL.length) {
+    renderDonut();
+    renderBarras(NOTAS_ACTUAL);
+  }
+});
 
 /* ── Arranque ── */
 (async () => {
