@@ -244,12 +244,12 @@ async function loadClientesFromSupabase() {
   // Cargar notas para obtener el estado de cada cliente
   let notasMap = new Map();
   try {
-    const rN = await fetch(`${SUPA_URL}/rest/v1/notas?select=id,estado`, {
+    const rN = await fetch(`${SUPA_URL}/rest/v1/notas?select=cliente_id,estado`, {
       headers: { 'apikey': supaKey, 'Authorization': `Bearer ${supaKey}` }
     });
     if (rN.ok) {
       const notas = await rN.json();
-      if (Array.isArray(notas)) notas.forEach(n => notasMap.set(n.id, n.estado || 'pendiente'));
+      if (Array.isArray(notas)) notas.forEach(n => notasMap.set(n.cliente_id, n.estado || 'pendiente'));
     }
   } catch(e) { console.log('   ⚠️  No se pudo leer notas:', e.message); }
 
