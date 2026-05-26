@@ -616,6 +616,7 @@ async function downloadExcelCompleto() {
     // Estilo cabecera
     wsAC.getRow(1).eachCell(c => hdrStyle(c));
     wsAC.getRow(1).height = 20;
+    wsAC.autoFilter = { from: 'A1', to: 'M1' };
 
     (clientes || []).forEach(c => {
       const n        = notasMap[c.id] || {};
@@ -691,7 +692,6 @@ async function downloadExcelCompleto() {
     URL.revokeObjectURL(url);
 
     if (btnFull) { btnFull.textContent = orig; btnFull.disabled = false; }
-    toast('✅ Excel completo descargado');
   } catch(e) {
     if (btnFull) { btnFull.textContent = orig; btnFull.disabled = false; }
     alert('❌ Error generando Excel: ' + e.message);
@@ -741,8 +741,8 @@ async function downloadExcel(tipo) {
       const { data: notasArr } = await sb.from('notas').select('*');
       (notasArr || []).forEach(n => notasMap.set(n.cliente_id, n));
     } else {
-      // Para planning también queremos el estado
-      const { data: notasArr } = await sb.from('notas').select('cliente_id,estado');
+      // Para planning también cargamos todos los campos de notas (para la pestaña Actividad Comercial)
+      const { data: notasArr } = await sb.from('notas').select('*');
       (notasArr || []).forEach(n => notasMap.set(n.cliente_id, n));
     }
 
@@ -761,8 +761,8 @@ async function downloadExcel(tipo) {
       weeks.get(wKey).push(day);
     });
 
-    // ── HOJA ACTIVIDAD COMERCIAL (solo en modo completo, va primera) ─────────
-    if (tipo === 'completo') {
+    // ── HOJA ACTIVIDAD COMERCIAL (siempre: tanto Semanal como Completo) ──────
+    {
       const ws = wb.addWorksheet('Actividad Comercial');
       ws.views = [{ state: 'frozen', ySplit: 1 }];
 
