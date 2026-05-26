@@ -666,7 +666,7 @@ function renderBarras(notasArr) {
     semanas.push({ label: `S${String(wk).padStart(2,'0')}`, lun: lunes(ref), dom: domingo(ref) });
   }
   const estados = ['realizada','pospuesta','no-interesado','pendiente'];
-  const data = semanas.map(s => {
+  let data = semanas.map(s => {
     const cnt = {}; estados.forEach(e => { cnt[e] = 0; });
     notasArr.forEach(n => {
       if (!n.fecha_visita) return;
@@ -678,6 +678,18 @@ function renderBarras(notasArr) {
     });
     return { ...s, cnt, total: Object.values(cnt).reduce((a,b)=>a+b,0) };
   });
+
+  // Si no hay ninguna visita registrada, mostrar barras de ejemplo
+  let barrasEjemplo = false;
+  if (!data.some(d => d.total > 0)) {
+    barrasEjemplo = true;
+    const mk = [{r:1,p:0,ni:0},{r:3,p:1,ni:0},{r:4,p:0,ni:1},{r:5,p:1,ni:0},{r:3,p:2,ni:0},{r:2,p:1,ni:0}];
+    data = data.map((s,i) => {
+      const c = mk[i] || {r:0,p:0,ni:0};
+      const cnt = { realizada:c.r, pospuesta:c.p, 'no-interesado':c.ni, pendiente:0 };
+      return { ...s, cnt, total: c.r+c.p+c.ni };
+    });
+  }
   const maxT = Math.max(...data.map(d => d.total), 1);
 
   document.getElementById('barras-wrap').innerHTML = `
@@ -701,6 +713,7 @@ function renderBarras(notasArr) {
       ${estados.map(e=>`<span style="display:flex;align-items:center;gap:3px">
         <span style="width:8px;height:8px;background:${ESTADO_COLORES[e]};border-radius:50%;display:inline-block"></span>
         ${ESTADO_LABEL[e]}</span>`).join('')}
+      ${barrasEjemplo ? '<span style="margin-left:auto;color:#d97706;font-size:9px;font-style:italic">⚠ datos de ejemplo</span>' : ''}
     </div>`
   ;
 }
@@ -715,7 +728,29 @@ async function renderSeguimientos(notasArr, clienteMap) {
 
   const tbody = document.getElementById('seg-tbody');
   if (!proximas.length) {
-    tbody.innerHTML = `<tr><td colspan="4" class="seg-empty">No hay seguimientos pendientes</td></tr>`;
+    // Sin seguimientos reales → mostrar filas de ejemplo
+    function _ad(n){const r=new Date();r.setDate(r.getDate()+n);return r;}
+    function _iso(d){return d.toISOString().slice(0,10);}
+    const mockSeg = [
+      {nombre:'Ferretería Zubizarreta', estado:'pospuesta',  fecha_seguimiento:_iso(_ad(3))},
+      {nombre:'Metalúrgica Norte',      estado:'pospuesta',  fecha_seguimiento:_iso(_ad(5))},
+      {nombre:'Carpintería Urdaibai',   estado:'pendiente',  fecha_seguimiento:_iso(_ad(10))},
+    ];
+    const h0 = new Date(); h0.setHours(0,0,0,0);
+    tbody.innerHTML = mockSeg.map(n => {
+      const e = n.estado;
+      const fs = new Date(n.fecha_seguimiento); fs.setHours(0,0,0,0);
+      const dias = Math.round((fs-h0)/86400000);
+      const dL = dias===0?'Hoy':dias===1?'Mañana':`en ${dias} días`;
+      const fL = fs.toLocaleDateString('es-ES',{day:'2-digit',month:'short'});
+      const bg = e==='pospuesta'?'#fffbeb':e==='realizada'?'#f0fdf4':e==='no-interesado'?'#fff5f5':'';
+      return `<tr style="${bg?'background:'+bg:''}">
+        <td style="font-weight:600;color:#1e293b">${n.nombre}</td>
+        <td><span class="ag-badge badge-${e}">${ESTADO_LABEL[e]||e}</span></td>
+        <td style="white-space:nowrap">${fL}</td>
+        <td class="seg-dias">${dL}</td>
+      </tr>`;
+    }).join('') + `<tr><td colspan="4" style="font-size:10px;color:#d97706;text-align:center;padding:4px;font-style:italic">⚠ datos de ejemplo</td></tr>`;
     return;
   }
 
