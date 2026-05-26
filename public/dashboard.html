@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
   <title>BilboWeb · Dashboard</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <!-- Chart.js se carga dinámicamente en el script con fallback de CDNs -->
   <style>
     *{box-sizing:border-box;margin:0;padding:0;}
     body{font-family:'Segoe UI',Arial,sans-serif;display:flex;flex-direction:column;
@@ -238,7 +238,28 @@ window.onerror = function(msg, src, line) {
   return false;
 };
 
-// Chart.register diferido para que un fallo de Chart.js no rompa el script
+// Carga Chart.js dinámicamente con fallback de 3 CDNs
+function cargarChartJS() {
+  return new Promise((resolve) => {
+    if (typeof Chart !== 'undefined') { resolve(true); return; }
+    const cdns = [
+      'https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js',
+      'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.3/chart.umd.min.js',
+      'https://unpkg.com/chart.js@4.4.3/dist/chart.umd.min.js'
+    ];
+    let i = 0;
+    function tryNext() {
+      if (i >= cdns.length) { resolve(false); return; }
+      const s = document.createElement('script');
+      s.src = cdns[i++];
+      s.onload = () => resolve(true);
+      s.onerror = tryNext;
+      document.head.appendChild(s);
+    }
+    tryNext();
+  });
+}
+
 let _chartRegistered = false;
 function ensureChart() {
   if (_chartRegistered) return true;
@@ -737,25 +758,24 @@ async function renderSeguimientos(notasArr, clienteMap) {
   }).join('');
 }
 
-/* ── Reintento de gráficos cuando la página termina de cargar ── */
-window.addEventListener('load', () => {
-  // Si Chart.js no estaba listo cuando renderTodo se llamó por primera vez,
-  // lo intentamos ahora que todos los recursos externos están cargados.
-  if (!_chartRegistered && NOTAS_ACTUAL.length) {
-    renderDonut();
-    renderBarras(NOTAS_ACTUAL);
-  }
-});
-
 /* ── Arranque ── */
 // Render mock de forma síncrona — independiente de red, auth y Chart.js
 renderConMock();
 
-// Auth y datos reales en background (no bloquean el render inicial)
+// Chart.js + Auth en paralelo
 (async () => {
+  // Cargar Chart.js y renderizar gráficas en cuanto esté disponible
+  cargarChartJS().then(ok => {
+    if (ok) { renderDonut(); renderBarras(NOTAS_ACTUAL); }
+    else console.warn('Chart.js no disponible en ningún CDN');
+  });
+
+  // Auth y datos reales (se ejecuta en paralelo a la carga de Chart.js)
   const ok = await checkAuth();
   if (!ok) return;
   await cargarDatos();
+  // Tras cargar datos reales, re-renderizar gráficas si Chart.js ya está
+  if (_chartRegistered) { renderDonut(); renderBarras(NOTAS_ACTUAL); }
 })();
 </script>
 </body>
