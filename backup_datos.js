@@ -119,9 +119,9 @@ async function restaurar() {
 
   // 1. NOTAS — borrar todas las actuales, reinsertar las del backup
   console.log('   🗑️  Borrando notas actuales...');
-  try { await supaDelete('notas', 'id=gte.0'); } catch(e) {
+  try { await supaDelete('notas', 'cliente_id=gte.'); } catch(e) {
     // Si no hay filas el DELETE puede fallar — ignorar
-    console.log('      (tabla notas ya estaba vacía o sin filas con id≥0)');
+    console.log('      (tabla notas ya estaba vacía)');
   }
 
   if (backup.notas.length > 0) {
