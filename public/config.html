@@ -208,6 +208,13 @@
             </div>
           </div>
 
+          <div class="fgroup">
+            <label class="flabel" for="empresasPorJornada">Empresas por jornada</label>
+            <input type="number" id="empresasPorJornada" class="finput" min="1" max="50"
+                   placeholder="Dejar vacío para usar el límite de horas" style="max-width:280px;">
+            <div class="fhint">Si se indica un número (ej: 11), cada día tendrá exactamente ese número de empresas, ignorando el límite de horas. Dejar vacío para el cálculo automático por horas.</div>
+          </div>
+
           <div class="row2">
             <div class="fgroup">
               <label class="flabel" for="horaInicioJornada">Inicio de jornada</label>
@@ -458,6 +465,7 @@ async function cargarConfig() {
 
     if (data.minutos_reunion != null) document.getElementById('minutosReunion').value = data.minutos_reunion;
     if (data.minutos_aparcamiento != null) document.getElementById('minutosAparcamiento').value = data.minutos_aparcamiento;
+    if (data.empresas_por_jornada != null) document.getElementById('empresasPorJornada').value = data.empresas_por_jornada;
     if (data.hora_inicio_jornada) document.getElementById('horaInicioJornada').value = data.hora_inicio_jornada;
 
     const radio = data.radio_andando ?? 600;
@@ -512,6 +520,7 @@ async function guardarConfig() {
     minutos_aparcamiento: parseInt(document.getElementById('minutosAparcamiento').value) || 10,
     hora_inicio_jornada: document.getElementById('horaInicioJornada').value || '09:00',
     radio_andando: parseInt(document.getElementById('radioAndando').value) || 600,
+    empresas_por_jornada: parseInt(document.getElementById('empresasPorJornada').value) || null,
     base: {
       nombre: document.getElementById('baseNombre').value.trim(),
       direccion: document.getElementById('baseDireccion').value.trim(),

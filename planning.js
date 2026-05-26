@@ -59,7 +59,8 @@ const EXCEL_OUT       = path.join(__dirname, 'planning_visitas.xlsx');
 const HTML_OUT        = path.join(__dirname, 'planning_mapa.html');
 
 let START_DATE      = parseFechaInicio(CFG.fechaInicio);
-let MAX_MIN_PER_DAY = (CFG.horasMaximaDia || 5) * 60;
+let MAX_MIN_PER_DAY  = (CFG.horasMaximaDia || 5) * 60;
+let MAX_EMPRESAS_DIA = CFG.empresasPorJornada ? Math.max(1, parseInt(CFG.empresasPorJornada) || 0) : 0;
 let MEETING_MIN     = CFG.minutosReunion      || 30;
 let PARKING_MIN     = CFG.minutosAparcamiento || 10;
 let CLIENT_MIN      = MEETING_MIN + PARKING_MIN;
@@ -722,7 +723,8 @@ function splitTourIntoDays(tour) {
       const ret     = retWalk + driveMin(retCarLat, retCarLon, BASE.lat, BASE.lon);
       const total   = minutesUsed + travel + stayMin + ret;
 
-      if (total > MAX_MIN_PER_DAY) break;
+      if (MAX_EMPRESAS_DIA > 0 && dayClients.length >= MAX_EMPRESAS_DIA) break;
+      if (MAX_EMPRESAS_DIA === 0 && total > MAX_MIN_PER_DAY) break;
 
       c._andando   = andando;
       c._travelMin = travel;
@@ -939,7 +941,12 @@ function asignarClustersADias(clusters) {
   for (const cluster of clustersConT) {
     if (cluster.clients.length === 0) continue;
 
-    if (cluster.estimatedTime <= MAX_MIN_PER_DAY) {
+    // ¿El cluster cabe en un solo día?
+    const clusterFitsDia = MAX_EMPRESAS_DIA > 0
+      ? cluster.clients.length <= MAX_EMPRESAS_DIA
+      : cluster.estimatedTime <= MAX_MIN_PER_DAY;
+
+    if (clusterFitsDia) {
       // Buscar el primer día con espacio Y compatible geográficamente
       const clCentro = centroide(cluster.clients);
       let placed = false;
@@ -951,8 +958,11 @@ function asignarClustersADias(clusters) {
 
         const combined = nnOrder([...day.clients, ...cluster.clients], BASE.lat, BASE.lon);
         recomputeTravels(combined, BASE.lat, BASE.lon);
-        const newTime = dayTravelTime(combined);
-        if (newTime <= MAX_MIN_PER_DAY) {
+        const newTime  = dayTravelTime(combined);
+        const comboFit = MAX_EMPRESAS_DIA > 0
+          ? combined.length <= MAX_EMPRESAS_DIA
+          : newTime <= MAX_MIN_PER_DAY;
+        if (comboFit) {
           day.clients  = combined;
           day.totalMin = newTime;
           placed = true;
@@ -971,9 +981,12 @@ function asignarClustersADias(clusters) {
         let i = 0;
 
         while (i < remaining.length) {
-          const test = nnOrder([...dayClients, remaining[i]], BASE.lat, BASE.lon);
+          const test    = nnOrder([...dayClients, remaining[i]], BASE.lat, BASE.lon);
           recomputeTravels(test, BASE.lat, BASE.lon);
-          if (dayTravelTime(test) <= MAX_MIN_PER_DAY) {
+          const testFit = MAX_EMPRESAS_DIA > 0
+            ? test.length <= MAX_EMPRESAS_DIA
+            : dayTravelTime(test) <= MAX_MIN_PER_DAY;
+          if (testFit) {
             dayClients.push(remaining[i]);
             i++;
           } else {
@@ -1915,6 +1928,7 @@ async function mergeSupabaseConfig() {
     if (sc.base)                  CFG.base                = sc.base;
     if (sc.filtros)               CFG.filtros             = sc.filtros;
     if (sc.google_api_key)        CFG.googleApiKey        = sc.google_api_key;
+    if (sc.empresas_por_jornada != null) CFG.empresasPorJornada = sc.empresas_por_jornada;
     console.log('   ✅ Configuración cargada desde Supabase (app_config)');
   } catch(e) {
     console.log('   ⚠️  Error leyendo config de Supabase:', e.message, '— usando config.json local');
@@ -1944,6 +1958,7 @@ async function main() {
   PARKING_MIN     = CFG.minutosAparcamiento || 10;
   CLIENT_MIN      = MEETING_MIN + PARKING_MIN;
   RADIO_ANDANDO   = CFG.radioAndando || 600;
+  MAX_EMPRESAS_DIA = CFG.empresasPorJornada ? Math.max(1, parseInt(CFG.empresasPorJornada) || 0) : 0;
   [WORK_H, WORK_M] = (CFG.horaInicioJornada || '09:00').split(':').map(Number);
   BASE            = CFG.base || { nombre: 'BilboWeb', lat: 43.2956, lon: -2.9921, direccion: 'Barakaldo, Bizkaia' };
   EXCLUIR_CLIENTES = new Set((CFG.filtros?.excluirClientes || []).map(s => s.toLowerCase()));
