@@ -354,6 +354,20 @@ async function init() {
       });
     })();
 
+    // Sobreescribir estado con el valor en tiempo real de la tabla notas
+    try {
+      const { data: notasVivas } = await sb.from('notas').select('cliente_id,estado');
+      if (notasVivas && notasVivas.length) {
+        const notasMap = {};
+        notasVivas.forEach(n => { if (n.cliente_id) notasMap[n.cliente_id] = n.estado; });
+        DATA.forEach(day => {
+          day.clients.forEach(c => {
+            if (c.id && notasMap[c.id] !== undefined) c.estado = notasMap[c.id];
+          });
+        });
+      }
+    } catch(e) { /* silencioso — si falla, usa el snapshot del planning */ }
+
     buildMarkers();
     buildSidebar();
   } catch (e) {
@@ -402,13 +416,19 @@ function buildSidebar() {
     const body = document.createElement('div');
     body.className = 'card-body';
 
+    const ESTADO_BADGE = {
+      'realizada':     '<span style="font-size:9px;background:#d1fae5;color:#065f46;border-radius:4px;padding:1px 5px;font-weight:700;margin-left:5px;vertical-align:middle">🟢 Realizada</span>',
+      'pospuesta':     '<span style="font-size:9px;background:#fef3c7;color:#d97706;border-radius:4px;padding:1px 5px;font-weight:700;margin-left:5px;vertical-align:middle">🟠 Pospuesta</span>',
+      'no-interesado': '<span style="font-size:9px;background:#fee2e2;color:#991b1b;border-radius:4px;padding:1px 5px;font-weight:700;margin-left:5px;vertical-align:middle">🔴 No interesado</span>',
+    };
+
     day.clients.forEach((c, ci) => {
       const row = document.createElement('div');
       row.className = 'cli-row';
       row.innerHTML = `
         <div class="cli-num" style="background:${day.color}">${c.order}</div>
         <div class="cli-info">
-          <div class="cli-name">${c.nombre}${c.estado === 'pospuesta' ? '<span style="font-size:9px;background:#fef3c7;color:#d97706;border-radius:4px;padding:1px 5px;font-weight:700;margin-left:5px;vertical-align:middle">🟠 Pospuesta</span>' : ''}</div>
+          <div class="cli-name">${c.nombre}${ESTADO_BADGE[c.estado] || ''}</div>
           <div class="cli-sub">${c.poblacion}${c.cp ? ' · ' + c.cp : ''}</div>
           <div class="cli-drv">${c.andando
             ? `🚶 ${c.travel} min andando`
