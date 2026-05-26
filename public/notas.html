@@ -200,6 +200,14 @@
     #overlay{position:fixed;inset:0;background:rgba(0,0,0,.25);
              z-index:9998;display:none;}
     #overlay.show{display:block;}
+
+    /* Card historial (visitadas fuera del planning) */
+    .card.historial{border:2px dashed #94a3b8;margin-top:14px;}
+    .card.historial .card-hdr{background:#475569 !important;}
+    #historial-toggle{display:block;text-align:center;padding:7px;font-size:11px;
+                      font-weight:600;color:#64748b;cursor:pointer;
+                      border-top:1px solid #e2e8f0;background:#f8fafc;}
+    #historial-toggle:hover{color:#1a56db;}
   </style>
 </head>
 <body>
@@ -277,6 +285,7 @@
   </div>
 
   <div id="cal"></div>
+  <div id="cal-historial"></div>
 
   <button id="exportBtn" onclick="exportarCSV()">⬇ Exportar notas CSV</button>
 </div>
@@ -506,6 +515,83 @@ function buildAll(schedule) {
   buildSidebar();
 }
 
+let diasH = [];  // días historial (global)
+
+function buildHistorial(diasHistorialArg) {
+  diasH = diasHistorialArg || [];
+  const cal = document.getElementById('cal-historial');
+  if (!cal) return;
+  cal.innerHTML = '';
+  if (!diasH.length) return;
+
+  diasH.forEach((day, di) => {
+    const idCard = 'hist-' + di;
+    const card   = document.createElement('div');
+    card.className = 'card historial';
+    card.id = idCard;
+
+    const hdr = document.createElement('div');
+    hdr.className = 'card-hdr';
+    hdr.style.background = '#475569';
+    hdr.innerHTML = `<span>${day.label}</span>
+      <span class="badge">${day.clientes.length} fichas</span>`;
+    hdr.onclick = () => {
+      const body = document.getElementById('hbody-' + di);
+      const isOpen = card.classList.contains('open');
+      card.classList.toggle('open', !isOpen);
+      body.style.display = isOpen ? 'none' : 'block';
+    };
+
+    const body = document.createElement('div');
+    body.className = 'card-body';
+    body.id = 'hbody-' + di;
+    body.style.display = 'none';
+
+    day.clientes.forEach(c => {
+      const nota = notas[c.id] || {};
+      const est  = nota.estado || 'pendiente';
+      const row  = document.createElement('div');
+      row.className = 'cli';
+      row.id = 'hrow-' + c.id;
+      row.innerHTML = `
+        <div class="cli-num" style="background:${markerColor('#475569', est)}">✓</div>
+        <div class="cli-info">
+          <div class="cli-name">${c.nombre}</div>
+          <div class="cli-sub">${c.poblacion}</div>
+          <span class="estado-pill ep-${est}">${estadoLabel(est)}</span>
+        </div>`;
+      row.onclick = () => abrirDrawer(c, day, -1);
+      body.appendChild(row);
+    });
+
+    card.appendChild(hdr);
+    card.appendChild(body);
+    cal.appendChild(card);
+  });
+
+  applyFilterHistorial();
+}
+
+function applyFilterHistorial() {
+  if (!diasH.length) return;
+  diasH.forEach((day, di) => {
+    let visibles = 0;
+    day.clientes.forEach(c => {
+      const row = document.getElementById('hrow-' + c.id);
+      if (!row) return;
+      const est  = (notas[c.id] || {}).estado || 'pendiente';
+      const show = filtroActual === 'todos' || est === filtroActual;
+      // también aplicar búsqueda
+      const q = (document.getElementById('q')?.value || '').toLowerCase().trim();
+      const matchQ = !q || c.nombre.toLowerCase().includes(q) || (c.poblacion || '').toLowerCase().includes(q);
+      row.style.display = (show && matchQ) ? '' : 'none';
+      if (show && matchQ) visibles++;
+    });
+    const card = document.getElementById('hist-' + di);
+    if (card) card.style.display = visibles > 0 ? '' : 'none';
+  });
+}
+
 function buildSidebar() {
   const cal = document.getElementById('cal');
   cal.innerHTML = '';
@@ -730,6 +816,7 @@ function filtrar(f) {
     b.classList.toggle('activo', b.dataset.f === f);
   });
   applyFilter();
+  applyFilterHistorial();
 }
 
 function applyFilter() {
@@ -766,6 +853,7 @@ function buscar() {
       }
     }
   });
+  applyFilterHistorial();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -876,7 +964,33 @@ async function init() {
       clientes: d.clientes || []
     }));
     (notasRows || []).forEach(n => { notas[n.cliente_id] = n; });
+
+    // Empresas con notas que NO están en el planning actual
+    const planIds = new Set(diasAdaptados.flatMap(d => d.clientes.map(c => c.id)));
+    const orphanIds = Object.keys(notas).filter(id => !planIds.has(id));
+    let diasHistorial = [];
+    if (orphanIds.length > 0) {
+      const { data: orphanClientes } = await sb
+        .from('clientes').select('id,nombre,direccion,poblacion,cp,lat,lon')
+        .in('id', orphanIds);
+      if (orphanClientes && orphanClientes.length > 0) {
+        diasHistorial = [{
+          label: '🗂 Visitadas · fuera del planning actual',
+          color: '#475569',
+          totalMin: 0,
+          isHistorial: true,
+          clientes: orphanClientes.map((c, i) => ({
+            id: c.id, nombre: c.nombre, direccion: c.direccion || '',
+            poblacion: c.poblacion || '', cp: c.cp || '',
+            lat: c.lat || null, lon: c.lon || null,
+            order: '—', llegada: '', salida: ''
+          }))
+        }];
+      }
+    }
+
     buildAll({ dias: diasAdaptados });
+    buildHistorial(diasHistorial);
     actualizarStats();
     const paramId = new URLSearchParams(location.search).get('id');
     if (paramId) {
