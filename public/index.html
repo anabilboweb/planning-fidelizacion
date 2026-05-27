@@ -428,11 +428,20 @@ function buildSidebar() {
     card.className = 'card';
     card.id = 'c' + di;
 
+    // Municipios más frecuentes del día (máx. 2)
+    const munCount = {};
+    day.clients.forEach(c => { if (c.poblacion) munCount[c.poblacion] = (munCount[c.poblacion] || 0) + 1; });
+    const munLabel = Object.entries(munCount).sort((a,b) => b[1]-a[1]).slice(0,2).map(([m]) => m).join(' · ');
+
     const h = document.createElement('div');
     h.className = 'card-hdr';
     h.style.background = day.color;
-    h.innerHTML = `<span>📅 ${day.dateLabel}</span>
-      <span class="badge">${day.clients.length} visitas · ${(day.totalMin / 60).toFixed(1)}h</span>`;
+    h.innerHTML = `
+      <div style="display:flex;flex-direction:column;gap:1px;min-width:0">
+        <span>📅 ${day.dateLabel}</span>
+        ${munLabel ? `<span style="font-size:10px;opacity:.75;font-weight:500;letter-spacing:.2px">${munLabel}</span>` : ''}
+      </div>
+      <span class="badge" style="flex-shrink:0">${day.clients.length} visitas · ${(day.totalMin / 60).toFixed(1)}h</span>`;
     h.onclick = () => toggleDay(di);
 
     const body = document.createElement('div');
