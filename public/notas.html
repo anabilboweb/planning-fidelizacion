@@ -758,7 +758,7 @@ async function abrirDrawer(cliente, day, di) {
   const nota = notas[cliente.id] || {};
 
   selEstado(nota.estado || 'pendiente', false);
-  document.getElementById('f-fecha').value        = nota.fecha_visita      || '';
+  document.getElementById('f-fecha').value        = nota.fecha_visita      || new Date().toISOString().slice(0,10);
   document.getElementById('f-seguimiento').value  = nota.fecha_seguimiento || '';
   document.getElementById('f-interlocutor').value = nota.interlocutor      || '';
   selStar(nota.interes || 0, false);
