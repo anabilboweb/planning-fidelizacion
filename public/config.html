@@ -381,6 +381,26 @@
 
   <!-- ── COLUMNA DERECHA ── -->
   <div class="col-right">
+
+    <!-- ── Copia de seguridad ── -->
+    <div class="card">
+      <div class="card-hdr" style="background:linear-gradient(135deg,#059669,#0891b2)">
+        <h2>📦 Copia de seguridad</h2>
+        <p>Descarga todas las notas y clientes en un archivo JSON</p>
+      </div>
+      <div class="card-body">
+        <p style="font-size:12px;color:#64748b;line-height:1.6;margin-bottom:14px;">
+          Genera un archivo <strong>.json</strong> con todas las notas registradas y el catálogo de clientes activos.
+          Guárdalo en un lugar seguro para poder restaurar los datos si fuera necesario.
+        </p>
+        <button onclick="exportarBackup()" id="btnBackup"
+          style="width:100%;padding:12px;background:#059669;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;transition:background .15s;display:flex;align-items:center;justify-content:center;gap:8px;">
+          ⬇ Exportar copia de seguridad
+        </button>
+        <div id="backup-status" style="display:none;margin-top:10px;font-size:12px;font-weight:600;padding:8px 12px;border-radius:8px;"></div>
+      </div>
+    </div>
+
     <div class="card regen-card">
       <div class="card-hdr">
         <h2>🔄 Regenerar Planning</h2>
@@ -801,6 +821,52 @@ function parseCsvLine(line) {
   const ok = await checkAuth();
   if (ok) iniciarApp();
 })();
+
+async function exportarBackup() {
+  const btn = document.getElementById('btnBackup');
+  const statusEl = document.getElementById('backup-status');
+  btn.disabled = true;
+  btn.innerHTML = '⏳ Exportando...';
+  statusEl.style.display = 'none';
+
+  try {
+    const [{ data: notas, error: e1 }, { data: clientes, error: e2 }] = await Promise.all([
+      sb.from('notas').select('*'),
+      sb.from('clientes').select('*')
+    ]);
+    if (e1) throw e1;
+    if (e2) throw e2;
+
+    const fecha = new Date().toISOString().slice(0, 10);
+    const payload = {
+      exportado_en: new Date().toISOString(),
+      notas: notas || [],
+      clientes: clientes || []
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `backup_bilboweb_${fecha}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    statusEl.textContent = `✅ ${(notas||[]).length} notas y ${(clientes||[]).length} clientes exportados`;
+    statusEl.style.background = '#f0fdf4';
+    statusEl.style.border = '1.5px solid #86efac';
+    statusEl.style.color = '#166534';
+    statusEl.style.display = 'block';
+  } catch (err) {
+    statusEl.textContent = '❌ Error: ' + (err.message || err);
+    statusEl.style.background = '#fef2f2';
+    statusEl.style.border = '1.5px solid #fca5a5';
+    statusEl.style.color = '#991b1b';
+    statusEl.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '⬇ Exportar copia de seguridad';
+  }
+}
 </script>
 </body>
 </html>

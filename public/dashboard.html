@@ -244,7 +244,7 @@
 
     <!-- ZONA 3: Seguimientos -->
     <div id="seg-card">
-      <h3>Próximos seguimientos</h3>
+      <h3>Próximos seguimientos <span id="seg-count" style="display:none;background:#1a56db;color:#fff;border-radius:10px;font-size:11px;font-weight:700;padding:2px 8px;vertical-align:middle;margin-left:6px;"></span></h3>
       <div id="seg-table-wrap">
         <table id="seg-table">
           <thead>
@@ -447,12 +447,12 @@ function getMockData() {
   // Notas — mezcla de estados y fechas para poblar todos los widgets
   const notas = [
     { cliente_id:'ex-1', estado:'realizada',     fecha_visita: iso(hoy),               fecha_seguimiento: null },
-    { cliente_id:'ex-2', estado:'pospuesta',      fecha_visita: null,                   fecha_seguimiento: iso(addDays(hoy,5)) },
+    { cliente_id:'ex-2', estado:'pospuesta',      fecha_visita: null,                   fecha_seguimiento: iso(addDays(hoy,5)),  proximo_paso:'Enviar presupuesto web básica' },
     { cliente_id:'ex-3', estado:'pendiente',      fecha_visita: null,                   fecha_seguimiento: null },
     { cliente_id:'ex-4', estado:'realizada',      fecha_visita: iso(addDays(hoy,-4)),   fecha_seguimiento: null },
     { cliente_id:'ex-5', estado:'no-interesado',  fecha_visita: iso(addDays(hoy,-4)),   fecha_seguimiento: null },
-    { cliente_id:'ex-6', estado:'pendiente',      fecha_visita: null,                   fecha_seguimiento: iso(addDays(hoy,10)) },
-    { cliente_id:'ex-7', estado:'pospuesta',      fecha_visita: null,                   fecha_seguimiento: iso(addDays(hoy,3)) },
+    { cliente_id:'ex-6', estado:'pendiente',      fecha_visita: null,                   fecha_seguimiento: iso(addDays(hoy,10)), proximo_paso:'Llamar y confirmar demo online' },
+    { cliente_id:'ex-7', estado:'pospuesta',      fecha_visita: null,                   fecha_seguimiento: iso(addDays(hoy,2)),  proximo_paso:'Revisar cambios solicitados en web' },
     { cliente_id:'ex-8', estado:'pendiente',      fecha_visita: null,                   fecha_seguimiento: null },
     // Historial de semanas anteriores para las barras
     { cliente_id:'ex-h1', estado:'realizada',     fecha_visita: iso(addDays(hoy,-7)),   fecha_seguimiento: null },
@@ -792,50 +792,71 @@ async function renderSeguimientos(notasArr, clienteMap) {
     .sort((a, b) => a.fecha_seguimiento.localeCompare(b.fecha_seguimiento))
     .slice(0, 10);
 
-  const tbody = document.getElementById('seg-tbody');
+  const tbody    = document.getElementById('seg-tbody');
+  const countEl  = document.getElementById('seg-count');
+
+  function urgClass(dias) {
+    if (dias <= 2) return { bg:'#fff1f2', color:'#e11d48', dot:'🔴' };
+    if (dias <= 7) return { bg:'#fffbeb', color:'#d97706', dot:'🟡' };
+    return               { bg:'#f0fdf4', color:'#059669', dot:'🟢' };
+  }
+
   if (!proximas.length) {
-    // Sin seguimientos reales → mostrar filas de ejemplo
+    if (countEl) countEl.style.display = 'none';
+    // Sin seguimientos reales → filas de ejemplo
     function _ad(n){const r=new Date();r.setDate(r.getDate()+n);return r;}
     function _iso(d){return d.toISOString().slice(0,10);}
     const mockSeg = [
-      {nombre:'Ferretería Zubizarreta', estado:'pospuesta',  fecha_seguimiento:_iso(_ad(3))},
-      {nombre:'Metalúrgica Norte',      estado:'pospuesta',  fecha_seguimiento:_iso(_ad(5))},
-      {nombre:'Carpintería Urdaibai',   estado:'pendiente',  fecha_seguimiento:_iso(_ad(10))},
+      {nombre:'Ferretería Zubizarreta', estado:'pospuesta', fecha_seguimiento:_iso(_ad(2)),  proximo_paso:'Revisar cambios solicitados en web'},
+      {nombre:'Metalúrgica Norte',      estado:'pospuesta', fecha_seguimiento:_iso(_ad(5)),  proximo_paso:'Enviar presupuesto web básica'},
+      {nombre:'Carpintería Urdaibai',   estado:'pendiente', fecha_seguimiento:_iso(_ad(10)), proximo_paso:''},
     ];
     const h0 = new Date(); h0.setHours(0,0,0,0);
     tbody.innerHTML = mockSeg.map(n => {
-      const e = n.estado;
+      const e  = n.estado;
       const fs = new Date(n.fecha_seguimiento); fs.setHours(0,0,0,0);
       const dias = Math.round((fs-h0)/86400000);
-      const dL = dias===0?'Hoy':dias===1?'Mañana':`en ${dias} días`;
-      const fL = fs.toLocaleDateString('es-ES',{day:'2-digit',month:'short'});
-      const bg = e==='pospuesta'?'#fffbeb':e==='realizada'?'#f0fdf4':e==='no-interesado'?'#fff5f5':'';
-      return `<tr style="${bg?'background:'+bg:''}">
-        <td style="font-weight:600;color:#1e293b">${n.nombre}</td>
+      const dL   = dias===0?'Hoy':dias===1?'Mañana':`${dias}d`;
+      const fL   = fs.toLocaleDateString('es-ES',{day:'2-digit',month:'short'});
+      const u    = urgClass(dias);
+      return `<tr style="background:${u.bg}">
+        <td style="font-weight:600;color:#1e293b">
+          ${n.nombre}
+          ${n.proximo_paso?`<div style="font-size:10px;color:#64748b;font-weight:400;margin-top:2px;">${n.proximo_paso}</div>`:''}
+        </td>
         <td><span class="ag-badge badge-${e}">${ESTADO_LABEL[e]||e}</span></td>
-        <td style="white-space:nowrap">${fL}</td>
-        <td class="seg-dias">${dL}</td>
+        <td style="white-space:nowrap;font-size:12px">${fL}</td>
+        <td class="seg-dias" style="color:${u.color};font-weight:600">${u.dot} ${dL}</td>
       </tr>`;
     }).join('') + `<tr><td colspan="4" style="font-size:10px;color:#d97706;text-align:center;padding:4px;font-style:italic">⚠ datos de ejemplo</td></tr>`;
     return;
   }
 
+  // Datos reales
+  if (countEl) {
+    countEl.textContent = proximas.length;
+    countEl.style.display = 'inline-block';
+  }
+
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
   tbody.innerHTML = proximas.map(n => {
-    const cliente = clienteMap.get(n.cliente_id);
-    const nombre = cliente?.nombre || `Cliente ${n.cliente_id || n.id}`;
-    const estado = n.estado || 'pendiente';
-    const badgeClass = 'ag-badge badge-' + estado;
-    const fs = new Date(n.fecha_seguimiento); fs.setHours(0, 0, 0, 0);
-    const dias = Math.round((fs - hoy) / 86400000);
-    const diasLabel = dias === 0 ? 'Hoy' : dias === 1 ? 'Mañana' : `en ${dias} días`;
+    const cliente    = clienteMap.get(n.cliente_id);
+    const nombre     = cliente?.nombre || `Cliente ${n.cliente_id || n.id}`;
+    const estado     = n.estado || 'pendiente';
+    const fs         = new Date(n.fecha_seguimiento); fs.setHours(0, 0, 0, 0);
+    const dias       = Math.round((fs - hoy) / 86400000);
+    const diasLabel  = dias === 0 ? 'Hoy' : dias === 1 ? 'Mañana' : `${dias}d`;
     const fechaLabel = fs.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
-    const rowBg = estado === 'pospuesta' ? '#fffbeb' : estado === 'realizada' ? '#f0fdf4' : estado === 'no-interesado' ? '#fff5f5' : '';
-    return `<tr style="${rowBg ? 'background:' + rowBg : ''}">
-      <td style="font-weight:600;color:#1e293b">${nombre}</td>
-      <td><span class="${badgeClass}">${ESTADO_LABEL[estado] || estado}</span></td>
-      <td style="white-space:nowrap">${fechaLabel}</td>
-      <td class="seg-dias">${diasLabel}</td>
+    const u          = urgClass(dias);
+    const pp         = n.proximo_paso || '';
+    return `<tr style="background:${u.bg}">
+      <td style="font-weight:600;color:#1e293b">
+        ${nombre}
+        ${pp?`<div style="font-size:10px;color:#64748b;font-weight:400;margin-top:2px;">${pp}</div>`:''}
+      </td>
+      <td><span class="ag-badge badge-${estado}">${ESTADO_LABEL[estado]||estado}</span></td>
+      <td style="white-space:nowrap;font-size:12px">${fechaLabel}</td>
+      <td class="seg-dias" style="color:${u.color};font-weight:600">${u.dot} ${diasLabel}</td>
     </tr>`;
   }).join('');
 }
