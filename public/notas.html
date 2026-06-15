@@ -46,6 +46,16 @@
     .filtro-btn[data-f="pospuesta"].activo{background:#d97706;border-color:#d97706;}
     .filtro-btn[data-f="no-interesado"].activo{background:#dc2626;border-color:#dc2626;}
 
+    /* Filtro de estrellas (interés) */
+    #filtro-estrellas{display:flex;gap:5px;padding:8px 12px;background:#f8fafc;
+                      border-bottom:1px solid #e2e8f0;flex-wrap:wrap;align-items:center;}
+    .fe-label{font-size:11px;color:#94a3b8;font-weight:600;margin-right:2px;}
+    .estrella-btn{padding:4px 9px;border-radius:20px;border:1.5px solid #e2e8f0;
+                  background:#fff;font-size:11px;cursor:pointer;font-weight:700;
+                  transition:all .15s;color:#cbd5e1;}
+    .estrella-btn.activo{background:#fef3c7;border-color:#f59e0b;color:#d97706;}
+    .flat-stars{font-size:11px;color:#f59e0b;letter-spacing:1px;margin-left:6px;white-space:nowrap;}
+
     /* Stats rápidas */
     #stats{display:flex;gap:0;border-bottom:1px solid #e2e8f0;}
     .stat{flex:1;text-align:center;padding:7px 4px;border-right:1px solid #e2e8f0;}
@@ -232,6 +242,8 @@
       /* Filtros en dos líneas */
       #filtros { gap: 4px; padding: 7px 10px; }
       .filtro-btn { font-size: 10px; padding: 3px 7px; }
+      #filtro-estrellas { gap: 4px; padding: 7px 10px; }
+      .estrella-btn { font-size: 10px; padding: 3px 7px; }
 
       /* Stats más compactos */
       .stat .n { font-size: 16px; }
@@ -306,6 +318,15 @@
     <button class="filtro-btn" data-f="realizada" onclick="filtrar('realizada')">🟢 Realizada</button>
     <button class="filtro-btn" data-f="pospuesta" onclick="filtrar('pospuesta')">🟠 Pospuesta</button>
     <button class="filtro-btn" data-f="no-interesado" onclick="filtrar('no-interesado')">🔴 No interesado</button>
+  </div>
+
+  <div id="filtro-estrellas">
+    <span class="fe-label">Interés:</span>
+    <button class="estrella-btn" data-n="1" onclick="toggleEstrellaFiltro(1)">★1</button>
+    <button class="estrella-btn" data-n="2" onclick="toggleEstrellaFiltro(2)">★2</button>
+    <button class="estrella-btn" data-n="3" onclick="toggleEstrellaFiltro(3)">★3</button>
+    <button class="estrella-btn" data-n="4" onclick="toggleEstrellaFiltro(4)">★4</button>
+    <button class="estrella-btn" data-n="5" onclick="toggleEstrellaFiltro(5)">★5</button>
   </div>
 
   <div id="stats">
@@ -509,6 +530,7 @@ let notas         = {};   // { cliente_id: notaObj }
 let clienteActual = null;
 let estrellasVal  = 0;
 let filtroActual  = 'todos';
+let filtroEstrellas = new Set(); // valores 1-5 marcados para filtrar por interés
 let activeDay     = null;
 let mkrs          = {};
 let lines         = {};
@@ -861,6 +883,15 @@ function filtrar(f) {
   render();
 }
 
+function toggleEstrellaFiltro(n) {
+  if (filtroEstrellas.has(n)) filtroEstrellas.delete(n);
+  else filtroEstrellas.add(n);
+  document.querySelectorAll('.estrella-btn').forEach(b => {
+    b.classList.toggle('activo', filtroEstrellas.has(Number(b.dataset.n)));
+  });
+  render();
+}
+
 function applyFilter() { render(); }
 
 function buildFlatFiltered(estado, q) {
@@ -868,22 +899,29 @@ function buildFlatFiltered(estado, q) {
   div.innerHTML = '';
 
   const matches = allClientsFlat.filter(c => {
-    const cEstado = (notas[c.id] || {}).estado || 'pendiente';
-    const estadoOk = cEstado === estado;
+    const nota = notas[c.id] || {};
+    const cEstado = nota.estado || 'pendiente';
+    const estadoOk = estado === 'todos' || cEstado === estado;
+    const interes = nota.interes || 0;
+    const starsOk = filtroEstrellas.size === 0 || filtroEstrellas.has(interes);
     const matchQ = !q || (c.nombre||'').toLowerCase().includes(q)
                        || (c.poblacion||'').toLowerCase().includes(q)
                        || (c.direccion||'').toLowerCase().includes(q);
-    return estadoOk && matchQ;
+    return estadoOk && starsOk && matchQ;
   });
 
   if (!matches.length) {
-    div.innerHTML = `<div class="flat-empty">Sin empresas con estado<br><strong>${estadoLabel(estado)}</strong></div>`;
+    const partes = [];
+    if (estado !== 'todos') partes.push(`estado <strong>${estadoLabel(estado)}</strong>`);
+    if (filtroEstrellas.size) partes.push(`interés ${[...filtroEstrellas].sort().map(n => '★'.repeat(n)).join(' / ')}`);
+    div.innerHTML = `<div class="flat-empty">Sin empresas con ${partes.join(' y ') || 'estos filtros'}</div>`;
     return;
   }
 
   matches.forEach(c => {
     const nota = notas[c.id] || {};
     const est  = nota.estado || 'pendiente';
+    const interes = nota.interes || 0;
     const col  = c.enPlanning ? (c.dayColor || '#1a56db') : '#475569';
     const row  = document.createElement('div');
     row.className = 'flat-item';
@@ -894,6 +932,7 @@ function buildFlatFiltered(estado, q) {
         <div class="cli-sub">${c.poblacion || ''}${c.cp ? ' · ' + c.cp : ''}</div>
         <span class="flat-tag">${c.enPlanning ? '📅 ' + c.dayLabel : '⚠️ Fuera del planning actual'}</span>
       </div>
+      ${interes ? `<span class="flat-stars">${'★'.repeat(interes)}${'☆'.repeat(5-interes)}</span>` : ''}
       <span class="estado-pill ep-${est}">${estadoLabel(est)}</span>`;
     row.onclick = () => abrirDrawer(c, {}, -1);
     div.appendChild(row);
@@ -906,7 +945,7 @@ function render() {
   const calH   = document.getElementById('cal-historial');
   const calF   = document.getElementById('cal-filtrado');
 
-  if (filtroActual === 'todos') {
+  if (filtroActual === 'todos' && filtroEstrellas.size === 0) {
     calDiv.style.display = '';
     calH.style.display   = 'none';
     calF.style.display   = 'none';
