@@ -1,0 +1,28 @@
+name: Supabase Keep-Alive
+
+on:
+  schedule:
+    - cron: '0 8 */5 * *'  # cada 5 días a las 8:00 UTC — por debajo del límite de 7 días de Supabase
+  workflow_dispatch:         # también se puede lanzar manualmente desde GitHub Actions
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Ping Supabase
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            "$SUPABASE_URL/rest/v1/app_config?select=hora_inicio&limit=1" \
+            -H "apikey: $SUPABASE_SERVICE_KEY" \
+            -H "Authorization: Bearer $SUPABASE_SERVICE_KEY")
+          echo "Supabase respondió con HTTP $STATUS"
+          if [ "$STATUS" -lt 200 ] || [ "$STATUS" -gt 299 ]; then
+            echo "Respuesta inesperada: $STATUS"
+            exit 1
+          fi
+          echo "Proyecto activo"
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
