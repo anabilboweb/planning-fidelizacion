@@ -168,6 +168,7 @@
   <a href="/notas">📝 Notas</a>
   <a href="/dashboard">📊 Dashboard</a>
   <a href="/config" class="active">⚙️ Config</a>
+  <a href="/guia">📖 Guía</a>
   <button onclick="logoutUser()" style="margin-left:auto;background:transparent;border:1px solid rgba(255,255,255,.3);color:rgba(255,255,255,.7);padding:4px 12px;border-radius:6px;font-size:11px;cursor:pointer;font-weight:600;">
     Salir
   </button>
@@ -334,6 +335,49 @@
           <div class="fgroup">
             <label class="flabel">Total clientes en Supabase</label>
             <div id="clientes-count" style="font-size:18px;font-weight:800;color:#1a56db;">—</div>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">➕ Añadir cliente</div>
+          <div class="row2">
+            <div class="fgroup" style="flex:3">
+              <label class="flabel" for="manNombre">Nombre *</label>
+              <input type="text" id="manNombre" class="finput" placeholder="Ej: Ferretería Zubizarreta">
+            </div>
+            <div class="fgroup" style="flex:2">
+              <label class="flabel" for="manCp">Código postal *</label>
+              <input type="text" id="manCp" class="finput" placeholder="48930" maxlength="10">
+            </div>
+          </div>
+          <div class="row2">
+            <div class="fgroup">
+              <label class="flabel" for="manDireccion">Dirección</label>
+              <input type="text" id="manDireccion" class="finput" placeholder="Calle Mayor 12">
+            </div>
+            <div class="fgroup">
+              <label class="flabel" for="manPoblacion">Población</label>
+              <input type="text" id="manPoblacion" class="finput" placeholder="Getxo">
+            </div>
+          </div>
+          <div class="row2">
+            <div class="fgroup">
+              <label class="flabel" for="manProvincia">Provincia</label>
+              <input type="text" id="manProvincia" class="finput" placeholder="Bizkaia">
+            </div>
+            <div class="fgroup" style="display:flex;align-items:flex-end;">
+              <button type="button" onclick="añadirClienteManual()"
+                style="width:100%;padding:10px;background:#1a56db;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">
+                💾 Guardar cliente
+              </button>
+            </div>
+          </div>
+          <div id="man-status" style="display:none;margin-top:10px;padding:10px 14px;border-radius:8px;font-size:13px;font-weight:600;"></div>
+          <div id="man-nota-btn" style="display:none;margin-top:8px;">
+            <a id="man-nota-link" href="/notas"
+              style="display:inline-block;padding:9px 18px;background:#059669;color:#fff;border-radius:8px;font-size:13px;font-weight:700;text-decoration:none;">
+              📝 Añadir nota para este cliente
+            </a>
           </div>
         </div>
 
@@ -815,6 +859,54 @@ function parseCsvLine(line) {
   }
   fields.push(cur);
   return fields;
+}
+
+async function añadirClienteManual() {
+  const nombre = document.getElementById('manNombre').value.trim();
+  const cp = document.getElementById('manCp').value.trim().replace('.0','');
+  const direccion = document.getElementById('manDireccion').value.trim();
+  const poblacion = document.getElementById('manPoblacion').value.trim();
+  const provincia = document.getElementById('manProvincia').value.trim();
+  const statusEl = document.getElementById('man-status');
+  const notaBtnEl = document.getElementById('man-nota-btn');
+  const notaLinkEl = document.getElementById('man-nota-link');
+
+  if (!nombre || !cp) {
+    statusEl.style.cssText = 'display:block;margin-top:10px;padding:10px 14px;border-radius:8px;font-size:13px;font-weight:600;background:#fee2e2;border:1.5px solid #fca5a5;color:#991b1b;';
+    statusEl.textContent = '⚠️ Nombre y Código postal son obligatorios';
+    return;
+  }
+
+  statusEl.style.cssText = 'display:block;margin-top:10px;padding:10px 14px;border-radius:8px;font-size:13px;font-weight:600;background:#eff6ff;border:1.5px solid #bfdbfe;color:#1e40af;';
+  statusEl.textContent = '⏳ Guardando…';
+  notaBtnEl.style.display = 'none';
+
+  try {
+    const seed = `${nombre}|${cp}`;
+    const buf = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(seed));
+    const id = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('').slice(0,16);
+
+    const { error } = await sb.from('clientes').upsert(
+      { id, nombre, direccion, poblacion, cp, provincia, activo: true },
+      { onConflict: 'id' }
+    );
+    if (error) throw new Error(error.message);
+
+    statusEl.style.cssText = 'display:block;margin-top:10px;padding:10px 14px;border-radius:8px;font-size:13px;font-weight:600;background:#d1fae5;border:1.5px solid #6ee7b7;color:#065f46;';
+    statusEl.textContent = `✅ "${nombre}" guardado correctamente`;
+    notaLinkEl.href = `/notas?add=${id}&nombre=${encodeURIComponent(nombre)}`;
+    notaBtnEl.style.display = 'block';
+
+    document.getElementById('manNombre').value = '';
+    document.getElementById('manCp').value = '';
+    document.getElementById('manDireccion').value = '';
+    document.getElementById('manPoblacion').value = '';
+    document.getElementById('manProvincia').value = '';
+    cargarClientesCount();
+  } catch(e) {
+    statusEl.style.cssText = 'display:block;margin-top:10px;padding:10px 14px;border-radius:8px;font-size:13px;font-weight:600;background:#fee2e2;border:1.5px solid #fca5a5;color:#991b1b;';
+    statusEl.textContent = '❌ Error: ' + e.message;
+  }
 }
 
 (async () => {

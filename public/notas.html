@@ -297,6 +297,7 @@
   <a href="/notas" class="active">📝 Notas</a>
   <a href="/dashboard">📊 Dashboard</a>
   <a href="/config">⚙️ Config</a>
+  <a href="/guia">📖 Guía</a>
   <button onclick="logoutUser()" style="margin-left:auto;background:transparent;border:1px solid rgba(255,255,255,.3);color:rgba(255,255,255,.7);padding:4px 12px;border-radius:6px;font-size:11px;cursor:pointer;font-weight:600;">
     Salir
   </button>
@@ -1148,6 +1149,41 @@ async function init() {
         }
       }
     }
+
+    const addId = new URLSearchParams(location.search).get('add');
+    if (addId) {
+      let found = false;
+      for (let di = 0; di < dias.length; di++) {
+        const ci = dias[di].clientes.findIndex(c => c.id === addId);
+        if (ci !== -1) {
+          openDay(di);
+          abrirDrawer(dias[di].clientes[ci], dias[di], di);
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        for (let di = 0; di < diasH.length; di++) {
+          const ci = diasH[di].clientes.findIndex(c => c.id === addId);
+          if (ci !== -1) {
+            abrirDrawer(diasH[di].clientes[ci], diasH[di], -1);
+            found = true;
+            break;
+          }
+        }
+      }
+      if (!found) {
+        sb.from('clientes').select('id,nombre,direccion,poblacion,cp,lat,lon').eq('id', addId).single()
+          .then(({ data: c }) => {
+            if (c) {
+              const clienteNuevo = { id: c.id, nombre: c.nombre, direccion: c.direccion || '', poblacion: c.poblacion || '', cp: c.cp || '', lat: c.lat || null, lon: c.lon || null, order: '—', llegada: '', salida: '' };
+              const diaVirtual = { label: '🆕 Cliente recién añadido', color: '#7c3aed', totalMin: 0, isHistorial: true };
+              abrirDrawer(clienteNuevo, diaVirtual, -1);
+            }
+          });
+      }
+    }
+
     // No abrir ningún día por defecto — el usuario expande el que quiere
   } catch (e) {
     toast('❌ Error al cargar: ' + e.message);

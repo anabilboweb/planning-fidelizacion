@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>BilboWeb · Guía de uso</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:'Segoe UI',Arial,sans-serif;display:flex;flex-direction:column;min-height:100vh;background:#f1f5f9;}
+    #nav{display:flex;align-items:center;background:#1e293b;height:36px;flex-shrink:0;padding:0 16px;}
+    #nav a{color:rgba(255,255,255,.65);text-decoration:none;font-size:12px;font-weight:600;padding:0 14px;height:36px;display:flex;align-items:center;border-bottom:2px solid transparent;transition:all .15s;}
+    #nav a:hover{color:#fff;}
+    #nav a.active{color:#fff;border-bottom-color:#1a56db;}
+    #nav .nav-right{margin-left:auto;}
+    @media(max-width:600px){#nav{overflow-x:auto;overflow-y:hidden;padding:0 8px;}#nav a{font-size:11px;padding:0 9px;white-space:nowrap;}#nav .nav-right{flex-shrink:0;margin-left:8px;}}
+    @media print{#nav,.print-fab{display:none!important;}body{background:#fff;}.wrapper{padding-block:12px;}}
+  </style>
+</head>
+<body>
+
+<nav id="nav">
+  <a href="/">🗓 Planning</a>
+  <a href="/notas">📝 Notas</a>
+  <a href="/dashboard">📊 Dashboard</a>
+  <a href="/config">⚙️ Config</a>
+  <a href="/guia" class="active">📖 Guía</a>
+  <div class="nav-right">
+    <button onclick="logoutUser()" style="background:transparent;border:1px solid rgba(255,255,255,.3);color:rgba(255,255,255,.7);padding:4px 12px;border-radius:6px;font-size:11px;cursor:pointer;font-weight:600;">Salir</button>
+  </div>
+</nav>
+
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+<style>
+  :root{--bg:#f8fafc;--surface:#fff;--border:#e2e8f0;--text:#1e293b;--muted:#64748b;--accent:#1a56db;--accent-lt:#eff6ff;--green:#059669;--green-lt:#f0fdf4;--amber:#d97706;--amber-lt:#fffbeb;--red:#dc2626;--red-lt:#fef2f2;--tip-bg:#eff6ff;--tip-bd:#93c5fd;}
+  @media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f172a;--surface:#1e293b;--border:#334155;--text:#f1f5f9;--muted:#94a3b8;--accent-lt:#1e3a5f;--green-lt:#052e16;--amber-lt:#1c1008;--red-lt:#1c0a0a;--tip-bg:#1e3a5f;--tip-bd:#3b82f6;}}
+  :root[data-theme="dark"]{--bg:#0f172a;--surface:#1e293b;--border:#334155;--text:#f1f5f9;--muted:#94a3b8;--accent-lt:#1e3a5f;--green-lt:#052e16;--amber-lt:#1c1008;--red-lt:#1c0a0a;--tip-bg:#1e3a5f;--tip-bd:#3b82f6;}
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);font-size:15px;line-height:1.65;padding-inline:16px;}
+  .wrapper{max-width:860px;margin:0 auto;padding-block:40px;}
+  .doc-header{background:linear-gradient(135deg,var(--accent),#0ea5e9);color:#fff;border-radius:16px;padding:36px 36px 32px;margin-bottom:40px;}
+  .doc-header .label{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;opacity:.75;margin-bottom:8px;}
+  .doc-header h1{font-size:clamp(22px,4vw,32px);font-weight:800;line-height:1.15;margin-bottom:10px;text-wrap:balance;}
+  .doc-header p{font-size:14px;opacity:.85;max-width:560px;}
+  .url-badge{display:inline-block;margin-top:18px;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.3);border-radius:8px;padding:6px 14px;font-size:13px;font-weight:600;letter-spacing:.01em;}
+  .toc{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px 24px;margin-bottom:36px;}
+  .toc-title{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:12px;}
+  .toc ol{list-style:none;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:4px 16px;}
+  .toc ol li a{color:var(--accent);text-decoration:none;font-size:13px;font-weight:500;display:flex;align-items:center;gap:6px;padding:3px 0;}
+  .toc ol li a:hover{text-decoration:underline;}
+  .toc ol li a .n{width:20px;height:20px;border-radius:50%;background:var(--accent-lt);color:var(--accent);font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  section{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:28px 32px;margin-bottom:24px;scroll-margin-top:20px;}
+  @media(max-width:600px){section{padding:20px 18px;}}
+  .sec-label{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin-bottom:6px;}
+  h2{font-size:20px;font-weight:700;margin-bottom:16px;text-wrap:balance;}
+  h3{font-size:15px;font-weight:700;margin-top:24px;margin-bottom:8px;color:var(--text);}
+  p{margin-bottom:12px;color:var(--text);}p:last-child{margin-bottom:0;}
+  .steps{list-style:none;display:flex;flex-direction:column;gap:10px;margin:16px 0;}
+  .steps li{display:flex;gap:14px;align-items:flex-start;}
+  .step-n{width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;}
+  .steps li .body{flex:1;font-size:14px;}
+  .steps li .body strong{color:var(--text);}
+  .tip{background:var(--tip-bg);border:1px solid var(--tip-bd);border-radius:10px;padding:12px 16px;font-size:13px;margin:14px 0;display:flex;gap:10px;align-items:flex-start;}
+  .tip .icon{font-size:16px;flex-shrink:0;margin-top:1px;}
+  .badges{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0;}
+  .badge{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:20px;font-size:12px;font-weight:600;}
+  .badge-green{background:var(--green-lt);color:var(--green);}
+  .badge-amber{background:var(--amber-lt);color:var(--amber);}
+  .badge-red{background:var(--red-lt);color:var(--red);}
+  .badge-grey{background:var(--bg);color:var(--muted);border:1px solid var(--border);}
+  .dot{width:7px;height:7px;border-radius:50%;background:currentColor;}
+  .stars{color:#f59e0b;letter-spacing:2px;}
+  .tbl-wrap{overflow-x:auto;margin:16px 0;border-radius:10px;border:1px solid var(--border);}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th{background:var(--bg);font-weight:700;padding:10px 14px;text-align:left;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.06em;}
+  td{padding:10px 14px;border-top:1px solid var(--border);vertical-align:top;}
+  tr:first-child td{border-top:none;}
+  .mock-nav{background:#1e293b;border-radius:8px;padding:8px 12px;display:flex;gap:4px;margin:14px 0;flex-wrap:wrap;}
+  .mock-nav a{color:rgba(255,255,255,.6);font-size:11px;font-weight:600;padding:4px 10px;border-radius:4px;text-decoration:none;}
+  .mock-nav a.active{color:#fff;background:rgba(255,255,255,.1);border-bottom:2px solid #1a56db;}
+  .mock-btn{display:inline-block;padding:7px 16px;border-radius:8px;font-size:12px;font-weight:700;margin:3px;}
+  .mock-btn.blue{background:#1a56db;color:#fff;}
+  .mock-btn.green{background:#059669;color:#fff;}
+  .mock-btn.grey{background:var(--bg);color:var(--muted);border:1px solid var(--border);}
+  hr{border:none;border-top:1px solid var(--border);margin:22px 0;}
+  .doc-footer{text-align:center;color:var(--muted);font-size:12px;padding-block:24px;}
+  .print-fab{position:fixed;bottom:24px;right:24px;z-index:200;background:#1a56db;color:#fff;border:none;border-radius:12px;padding:12px 20px;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 4px 16px rgba(26,86,219,.35);display:flex;align-items:center;gap:8px;transition:background .15s;}
+  .print-fab:hover{background:#1e40af;}
+  @media print{#nav,.print-fab{display:none!important;}body{background:#fff;}section{break-inside:avoid;}}
+</style>
+
+<button class="print-fab print-hide" onclick="window.print()">⬇ Guardar como PDF</button>
+
+<div class="wrapper">
+  <div class="doc-header">
+    <div class="label">BilboWeb · Equipo comercial</div>
+    <h1>Guía de uso<br>Planning Fidelización</h1>
+    <p>Todo lo que necesitas saber para usar la aplicación en el día a día: planning, notas de visita, dashboard y configuración.</p>
+    <span class="url-badge">🌐 planning-fidelizacion.vercel.app</span>
+  </div>
+
+  <div class="toc">
+    <div class="toc-title">Contenido</div>
+    <ol>
+      <li><a href="#acceso"><span class="n">1</span> Acceder a la app</a></li>
+      <li><a href="#planning"><span class="n">2</span> Ver el planning</a></li>
+      <li><a href="#notas"><span class="n">3</span> Registrar una visita</a></li>
+      <li><a href="#dashboard"><span class="n">4</span> Dashboard</a></li>
+      <li><a href="#config"><span class="n">5</span> Configuración</a></li>
+      <li><a href="#clientes"><span class="n">6</span> Añadir clientes</a></li>
+      <li><a href="#backup"><span class="n">7</span> Copia de seguridad</a></li>
+    </ol>
+  </div>
+
+  <section id="acceso">
+    <div class="sec-label">Sección 1</div>
+    <h2>Acceder a la aplicación</h2>
+    <p>La app funciona en cualquier navegador (móvil o escritorio) sin instalar nada. Abre la dirección y verás la pantalla de acceso.</p>
+    <ol class="steps">
+      <li><span class="step-n">1</span><div class="body">Abre <strong>planning-fidelizacion.vercel.app</strong> en el navegador.</div></li>
+      <li><span class="step-n">2</span><div class="body">Introduce el <strong>email y contraseña</strong> del equipo y pulsa <strong>Entrar</strong>.</div></li>
+      <li><span class="step-n">3</span><div class="body">La app carga directamente en el planning de la semana.</div></li>
+    </ol>
+    <div class="tip"><span class="icon">💡</span><div>La sesión se mantiene activa en ese dispositivo. No hace falta volver a entrar cada vez que abres la app.</div></div>
+    <div class="mock-nav">
+      <a href="#" class="active">📅 Planning</a>
+      <a href="#">📝 Notas</a>
+      <a href="#">📊 Dashboard</a>
+      <a href="#">⚙️ Config</a>
+      <a href="#">📖 Guía</a>
+    </div>
+    <p style="font-size:13px;color:var(--muted)">La barra superior aparece en todas las páginas y permite moverse entre secciones.</p>
+  </section>
+
+  <section id="planning">
+    <div class="sec-label">Sección 2</div>
+    <h2>Ver el planning semanal</h2>
+    <p>La página principal muestra el planning generado automáticamente: los clientes asignados a cada día, en qué orden visitarlos y los horarios estimados.</p>
+    <h3>Cómo leer el planning</h3>
+    <ol class="steps">
+      <li><span class="step-n">1</span><div class="body">Cada <strong>tarjeta</strong> representa un día de visitas. Encima aparece la fecha y el municipio principal.</div></li>
+      <li><span class="step-n">2</span><div class="body">Haz clic en una tarjeta para <strong>desplegarla</strong> y ver la lista de empresas con sus horarios de llegada y salida.</div></li>
+      <li><span class="step-n">3</span><div class="body">El <strong>punto de color</strong> junto a cada empresa indica su estado actual de visita en tiempo real.</div></li>
+    </ol>
+    <h3>Estados de visita</h3>
+    <div class="badges">
+      <span class="badge badge-grey"><span class="dot"></span>Pendiente</span>
+      <span class="badge badge-green"><span class="dot"></span>Realizada</span>
+      <span class="badge badge-amber"><span class="dot"></span>Pospuesta</span>
+      <span class="badge badge-red"><span class="dot"></span>No interesado</span>
+    </div>
+    <h3>Exportar a Excel</h3>
+    <p>En la parte superior del planning hay dos botones de exportación:</p>
+    <div>
+      <span class="mock-btn blue">📅 Semanal</span>
+      <span class="mock-btn blue">📊 Completo</span>
+    </div>
+    <div class="tbl-wrap" style="margin-top:14px">
+      <table>
+        <tr><th>Botón</th><th>Qué descarga</th></tr>
+        <tr><td><strong>Semanal</strong></td><td>Las empresas del planning activo con sus notas de visita</td></tr>
+        <tr><td><strong>Completo</strong></td><td>Todas las empresas de la base de datos con sus notas (histórico completo)</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <section id="notas">
+    <div class="sec-label">Sección 3</div>
+    <h2>Registrar una visita</h2>
+    <p>Después de visitar una empresa, registra el resultado desde la página <strong>Notas</strong>. Toda la información queda guardada aunque se regenere el planning.</p>
+    <ol class="steps">
+      <li><span class="step-n">1</span><div class="body">Ve a <strong>Notas</strong> en la barra superior.</div></li>
+      <li><span class="step-n">2</span><div class="body">Despliega el día correspondiente y pulsa sobre la empresa que acabas de visitar.</div></li>
+      <li><span class="step-n">3</span><div class="body">Se abre un formulario lateral. Rellena los campos que correspondan.</div></li>
+      <li><span class="step-n">4</span><div class="body">Pulsa <strong>Guardar nota</strong> al terminar.</div></li>
+    </ol>
+    <h3>Campos del formulario</h3>
+    <div class="tbl-wrap">
+      <table>
+        <tr><th>Campo</th><th>Para qué sirve</th></tr>
+        <tr><td><strong>Estado</strong></td><td>Resultado de la visita: Realizada, Pospuesta o No interesado</td></tr>
+        <tr><td><strong>Fecha visita</strong></td><td>Se rellena automáticamente con la fecha de hoy</td></tr>
+        <tr><td><strong>Fecha seguimiento</strong></td><td>Cuándo hay que volver a contactar — aparece en el Dashboard</td></tr>
+        <tr><td><strong>Interlocutor</strong></td><td>Nombre y cargo de la persona con quien se habló</td></tr>
+        <tr><td><strong>Interés</strong></td><td>Valoración de 1 a 5 estrellas del potencial del cliente</td></tr>
+        <tr><td><strong>Dolor principal</strong></td><td>Necesidad o problema que detectaste en la visita</td></tr>
+        <tr><td><strong>Servicios propuestos</strong></td><td>Qué servicios de BilboWeb encajan: Web, SEO, Ficha Google, etc.</td></tr>
+        <tr><td><strong>Próximo paso</strong></td><td>Qué hay que hacer después: enviar presupuesto, llamar, etc.</td></tr>
+        <tr><td><strong>Notas libres</strong></td><td>Cualquier información adicional</td></tr>
+      </table>
+    </div>
+    <div class="tip"><span class="icon">🎙️</span><div>Los campos de texto tienen un botón de <strong>micrófono</strong> — puedes dictar en voz alta directamente desde el móvil.</div></div>
+    <h3>Filtrar empresas</h3>
+    <p>Hay dos filas de filtros: por <strong>estado de visita</strong> y por <strong>estrellas de interés</strong> (puedes combinar ambos).</p>
+    <div class="badges" style="margin-bottom:6px">
+      <span class="badge badge-grey">Todos</span>
+      <span class="badge badge-green">🟢 Realizada</span>
+      <span class="badge badge-amber">🟠 Pospuesta</span>
+      <span class="badge badge-red">🔴 No interesado</span>
+    </div>
+    <div class="tip" style="background:var(--green-lt);border-color:#6ee7b7;"><span class="icon">🗂</span><div>Los clientes ya visitados que se hayan excluido del planning activo siguen siendo accesibles en Notas, en la sección <em>"Visitadas · fuera del planning actual"</em> al final del listado.</div></div>
+  </section>
+
+  <section id="dashboard">
+    <div class="sec-label">Sección 4</div>
+    <h2>Dashboard</h2>
+    <p>Resumen visual de la actividad comercial: KPIs, agenda de visitas, distribución por estados y los próximos seguimientos pendientes.</p>
+    <h3>Próximos seguimientos</h3>
+    <p>La sección inferior muestra las empresas con una <strong>fecha de seguimiento</strong> próxima, con código de colores:</p>
+    <div class="badges">
+      <span class="badge badge-red">🔴 Urgente (≤ 2 días)</span>
+      <span class="badge badge-amber">🟡 Esta semana (3–7 días)</span>
+      <span class="badge badge-green">🟢 Con margen (&gt; 7 días)</span>
+    </div>
+    <div class="tip"><span class="icon">📅</span><div>Para que una empresa aparezca en seguimientos, hay que haber rellenado el campo <strong>Fecha de seguimiento</strong> en sus notas de visita.</div></div>
+  </section>
+
+  <section id="config">
+    <div class="sec-label">Sección 5</div>
+    <h2>Configuración</h2>
+    <p>Permite ajustar cómo funciona el algoritmo de planificación y lanzar la regeneración del planning.</p>
+    <div class="tbl-wrap">
+      <table>
+        <tr><th>Parámetro</th><th>Qué controla</th></tr>
+        <tr><td><strong>Hora de inicio</strong></td><td>A qué hora empieza la jornada de visitas</td></tr>
+        <tr><td><strong>Duración de visita</strong></td><td>Minutos por reunión (usado para calcular horarios)</td></tr>
+        <tr><td><strong>Empresas por jornada</strong></td><td>Número fijo de visitas al día</td></tr>
+        <tr><td><strong>Base de operaciones</strong></td><td>Dirección de salida</td></tr>
+        <tr><td><strong>Excluir realizadas / No interesados</strong></td><td>Evita que el planning incluya empresas ya visitadas o descartadas</td></tr>
+      </table>
+    </div>
+    <h3>Regenerar el planning</h3>
+    <ol class="steps">
+      <li><span class="step-n">1</span><div class="body">Asegúrate de que la configuración está guardada.</div></li>
+      <li><span class="step-n">2</span><div class="body">Pulsa el botón <span class="mock-btn blue" style="font-size:11px;padding:4px 10px">🔄 Regenerar Planning</span></div></li>
+      <li><span class="step-n">3</span><div class="body">El proceso tarda entre 2 y 5 minutos.</div></li>
+    </ol>
+    <div class="tip"><span class="icon">✅</span><div><strong>Las notas de visita no se borran al regenerar.</strong> Solo cambia el orden y la distribución de días.</div></div>
+  </section>
+
+  <section id="clientes">
+    <div class="sec-label">Sección 6</div>
+    <h2>Añadir clientes</h2>
+    <p>Puedes añadir clientes de dos formas desde <strong>Config</strong>:</p>
+    <div class="tbl-wrap">
+      <table>
+        <tr><th>Método</th><th>Cuándo usarlo</th></tr>
+        <tr><td><strong>Importar CSV</strong></td><td>Para cargar muchos clientes a la vez desde Excel</td></tr>
+        <tr><td><strong>Añadir manualmente</strong></td><td>Para un cliente puntual, sobre todo cuando estás en campo</td></tr>
+      </table>
+    </div>
+    <h3>Formato CSV (5 columnas requeridas)</h3>
+    <div class="tbl-wrap">
+      <table>
+        <tr><th>Columna</th><th>Notas</th></tr>
+        <tr><td><strong>Nombre</strong></td><td>⚠️ Clave de identificación — debe ser idéntico al original</td></tr>
+        <tr><td><strong>Dirección</strong></td><td>Acepta también sin tilde</td></tr>
+        <tr><td><strong>Población</strong></td><td>Acepta también sin tilde</td></tr>
+        <tr><td><strong>Código postal</strong></td><td>⚠️ Clave de identificación — requiere tilde en la ó</td></tr>
+        <tr><td><strong>Provincia</strong></td><td></td></tr>
+      </table>
+    </div>
+    <div class="tip"><span class="icon">⚠️</span><div>Al guardar desde Excel, elige <strong>CSV UTF-8 (delimitado por comas)</strong> para que las tildes lleguen correctamente. Importa solo los clientes nuevos para no arriesgar duplicados.</div></div>
+    <h3>Añadir cliente manualmente (en campo)</h3>
+    <ol class="steps">
+      <li><span class="step-n">1</span><div class="body">Ve a <strong>Config</strong> → sección <strong>➕ Añadir cliente</strong>.</div></li>
+      <li><span class="step-n">2</span><div class="body">Rellena el nombre, dirección y código postal y pulsa <strong>Guardar cliente</strong>.</div></li>
+      <li><span class="step-n">3</span><div class="body">Pulsa <strong>Añadir nota ahora</strong> para ir directamente a registrar la visita.</div></li>
+    </ol>
+    <div class="tip"><span class="icon">💡</span><div>Después de añadir clientes manualmente o por CSV, pulsa <strong>Regenerar Planning</strong> para que aparezcan en las rutas.</div></div>
+  </section>
+
+  <section id="backup">
+    <div class="sec-label">Sección 7</div>
+    <h2>Copia de seguridad</h2>
+    <p>Desde Config puedes descargar una copia completa de todos los datos: notas de visitas y catálogo de clientes.</p>
+    <ol class="steps">
+      <li><span class="step-n">1</span><div class="body">Ve a <strong>Config</strong> → card <strong>📦 Copia de seguridad</strong>.</div></li>
+      <li><span class="step-n">2</span><div class="body">Pulsa <span class="mock-btn green" style="font-size:11px;padding:4px 10px">⬇ Exportar copia de seguridad</span></div></li>
+      <li><span class="step-n">3</span><div class="body">Se descarga un archivo <strong>backup_bilboweb_FECHA.json</strong> con todos los datos.</div></li>
+    </ol>
+    <div class="tip"><span class="icon">💾</span><div>Recomendado: hacer copia una vez a la semana o antes de cualquier cambio importante en los datos.</div></div>
+  </section>
+
+  <div class="doc-footer">Planning Fidelización · BilboWeb © 2026</div>
+</div>
+
+<script>
+const { createClient } = supabase;
+const sb = createClient(
+  'https://mwrkidkvjyrcuexxkhbv.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im13cmtpZGt2anlyY3VleHhraGJ2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3MTIzNDQsImV4cCI6MjA5NTI4ODM0NH0.i0WJYs8buXxL6UQEcChvj5Q5p3gN02_SjMGtXtndS2s'
+);
+
+async function checkAuth() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { window.location.href = '/'; return; }
+}
+
+async function logoutUser() {
+  await sb.auth.signOut();
+  window.location.href = '/';
+}
+
+window.addEventListener('DOMContentLoaded', checkAuth);
+</script>
+</body>
+</html>
