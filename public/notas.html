@@ -227,6 +227,19 @@
     .flat-item:hover { background:#f8fafc; }
     .flat-tag { font-size:9px;font-weight:600;color:#94a3b8;margin-top:2px;display:block; }
 
+    /* Búsqueda en base de datos completa */
+    #cal-db-search { padding:8px; }
+    .db-search-hdr { font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+                     color:#7c3aed;padding:6px 4px 4px;display:flex;align-items:center;gap:6px; }
+    .db-search-hdr::before { content:'';flex:1;height:1px;background:#ede9fe; }
+    .db-item { display:flex;align-items:center;gap:8px;padding:8px 11px;background:#faf5ff;
+               border:1px solid #ede9fe;border-radius:8px;margin-bottom:5px;cursor:pointer;transition:background .1s; }
+    .db-item:hover { background:#f3e8ff; }
+    .db-item .cli-name { font-size:13px;font-weight:600;color:#1e293b; }
+    .db-item .cli-sub  { font-size:11px;color:#94a3b8;margin-top:1px; }
+    .db-item .db-badge { font-size:9px;font-weight:700;color:#7c3aed;background:#ede9fe;
+                         padding:2px 7px;border-radius:20px;white-space:nowrap;flex-shrink:0; }
+
     /* ── MÓVIL ─────────────────────────────────────────────── */
     @media (max-width: 768px) {
       /* Nav scroll horizontal */
@@ -349,6 +362,7 @@
   <div id="cal"></div>
   <div id="cal-filtrado" style="display:none;overflow-y:auto;flex:1;padding:8px;"></div>
   <div id="cal-historial" style="display:none;"></div>
+  <div id="cal-db-search" style="display:none;"></div>
 
   <button id="exportBtn" onclick="exportarCSV()">⬇ Exportar notas CSV</button>
 </div>
@@ -881,6 +895,8 @@ function filtrar(f) {
   document.querySelectorAll('.filtro-btn').forEach(b => {
     b.classList.toggle('activo', b.dataset.f === f);
   });
+  const dbDiv = document.getElementById('cal-db-search');
+  if (dbDiv) { dbDiv.style.display = 'none'; dbDiv.innerHTML = ''; }
   render();
 }
 
@@ -977,8 +993,45 @@ function render() {
   }
 }
 
+let _dbTimer = null;
 function buscar() {
   render();
+  const q = (document.getElementById('q')?.value || '').trim();
+  const dbDiv = document.getElementById('cal-db-search');
+  clearTimeout(_dbTimer);
+  if (q.length < 2) { dbDiv.style.display = 'none'; dbDiv.innerHTML = ''; return; }
+  _dbTimer = setTimeout(() => buscarEnDB(q), 400);
+}
+
+async function buscarEnDB(q) {
+  const dbDiv = document.getElementById('cal-db-search');
+  // IDs ya visibles en la vista actual (planning + orphans)
+  const visibles = new Set(allClientsFlat.map(c => c.id));
+  try {
+    const { data } = await sb.from('clientes')
+      .select('id,nombre,direccion,poblacion,cp')
+      .ilike('nombre', `%${q}%`)
+      .eq('activo', true)
+      .limit(8);
+    const nuevos = (data || []).filter(c => !visibles.has(c.id));
+    if (!nuevos.length) { dbDiv.style.display = 'none'; dbDiv.innerHTML = ''; return; }
+    dbDiv.innerHTML = `<div class="db-search-hdr">📋 En base de datos</div>` +
+      nuevos.map(c => `
+        <div class="db-item" onclick="abrirClienteDB('${c.id}','${(c.nombre||'').replace(/'/g,"\\'")}','${(c.direccion||'').replace(/'/g,"\\'")}','${(c.poblacion||'').replace(/'/g,"\\'")}','${(c.cp||'')}')">
+          <div style="flex:1;min-width:0">
+            <div class="cli-name">${c.nombre}</div>
+            <div class="cli-sub">${[c.poblacion, c.cp].filter(Boolean).join(' · ')}</div>
+          </div>
+          <span class="db-badge">Sin nota aún</span>
+        </div>`).join('');
+    dbDiv.style.display = '';
+  } catch(e) { dbDiv.style.display = 'none'; }
+}
+
+function abrirClienteDB(id, nombre, direccion, poblacion, cp) {
+  const c = { id, nombre, direccion, poblacion, cp, lat: null, lon: null, order: '—', llegada: '', salida: '' };
+  const diaVirtual = { label: '📋 Base de datos', color: '#7c3aed', totalMin: 0, isHistorial: true };
+  abrirDrawer(c, diaVirtual, -1);
 }
 
 // ═══════════════════════════════════════════════════════════════
